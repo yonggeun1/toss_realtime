@@ -30,8 +30,9 @@ def get_toss_ranking(ranking_type="buy"):
         print(f"🚀 [{ranking_type}] Connecting to: {url}")
         driver.get(url)
         wait = WebDriverWait(driver, 15)
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-        time.sleep(3)
+        # 리스트 아이템이 로딩될 때까지 대기 (기존 body -> 실제 아이템)
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "a[href*='/stocks/']")))
+        time.sleep(5) # 데이터 로딩 대기 시간 증가
         
         # 📜 스크롤 다운
         last_height = driver.execute_script("return document.body.scrollHeight")
@@ -93,7 +94,8 @@ def get_toss_ranking(ranking_type="buy"):
             if not amount_str:
                 return 0
             try:
-                amount_str = amount_str.replace("순매수", "").replace("순매도", "").replace(",", "").replace(" ", "")
+                # "-" 제거 추가 (순매도 음수 표기 등 대비)
+                amount_str = amount_str.replace("순매수", "").replace("순매도", "").replace(",", "").replace(" ", "").replace("-", "")
                 total_amount = 0.0
                 if "조" in amount_str:
                     parts = amount_str.split("조")
@@ -169,11 +171,9 @@ def get_toss_ranking(ranking_type="buy"):
                     
                     # 날짜 문자열 정규화
                     if "어제" in collected_time:
-                        # 어제 날짜 계산 (단순히 continue하지 않고 처리하려면 계산 필요하나, 일단 기존 로직 존중하되 필요시 수정)
-                        # 여기서는 '어제' 데이터도 수집하고 싶다면 로직 변경 필요.
-                        # 사용자 요청: "기존 데이터가... 남아 있고, 신규 데이터가... insert"
-                        # 따라서 날짜가 과거라도 수집하는 것이 맞음.
-                        pass # 어제 데이터도 수집 허용 (날짜 변환 필요)
+                        yesterday = datetime.now() - timedelta(days=1)
+                        yesterday_str = yesterday.strftime('%Y-%m-%d')
+                        collected_time = collected_time.replace("어제", yesterday_str)
                     
                     if "오늘" in collected_time:
                         collected_time = collected_time.replace("오늘", today_date_str)
