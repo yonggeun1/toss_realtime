@@ -218,7 +218,10 @@ def get_toss_ranking(ranking_type="buy"):
 
         # 결과 저장 (Supabase)
         if all_data:
-            from toss_crawling.supabase_client import supabase
+            try:
+                from toss_crawling.supabase_client import supabase
+            except ImportError:
+                from supabase_client import supabase
 
             data_to_insert = []
             amount_col_name = f"{ranking_name}금액(억원)"
