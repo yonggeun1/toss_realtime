@@ -27,7 +27,7 @@ jobs:
     - name: Run Crawler
       env:
         Project_URL: ${{ secrets.Project_URL }}
-        Publishable_API_Key: ${{ secrets.Publishable_API_Key }}
+        Secret_keys: ${{ secrets.Secret_keys }}
       run: |
         # PYTHONPATH 설정으로 모듈 경로 인식
         export PYTHONPATH=$PYTHONPATH:$(pwd)
