@@ -1,15 +1,12 @@
 name: Toss Realtime Crawler
 
 on:
-#  schedule:
-#    # 매 30분마다 실행 (UTC 기준 00:00 ~ 07:00 -> KST 09:00 ~ 16:00)
-#    # 월~금요일만 실행
-#    - cron: '*/30 0-7 * * 1-5'
-  workflow_dispatch: # 수동 실행 가능
+  workflow_dispatch: # 수동 실행 또는 외부 API(cron-job 등) 트리거용
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 420 # 7시간 제한 (08:50 ~ 15:30 커버)
 
     steps:
     - uses: actions/checkout@v3
@@ -24,11 +21,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run Crawler
+    - name: Run Crawler (Continuous until 15:30 KST)
       env:
         Project_URL: ${{ secrets.Project_URL }}
         Secret_keys: ${{ secrets.Secret_keys }}
       run: |
         # PYTHONPATH 설정으로 모듈 경로 인식
         export PYTHONPATH=$PYTHONPATH:$(pwd)
-        python toss_crawling/toss_realtime_top100.py --once
+        # --once 옵션 제거: 15:30까지 루프 실행
+        python toss_crawling/toss_realtime_top100.py

@@ -255,22 +255,27 @@ def get_toss_ranking(ranking_type="buy"):
     finally:
         driver.quit()
 
+from datetime import datetime, timedelta
+
+# ... (imports 유지)
+
 if __name__ == "__main__":
     import sys
     
-    # --once 플래그 확인 (GitHub Actions 등에서 1회 실행용)
+    # --once 플래그 확인
     run_once = "--once" in sys.argv
 
     while True:
-        now = datetime.now()
-        # 15시 30분 이후 체크 (15:30 포함, 즉 15:30:00부터 종료)
-        # run_once일 경우 시간 체크 무시하고 실행할 수도 있지만, 장 마감 체크 로직은 유지하거나 필요에 따라 조정
+        # 🕒 서버 시간(UTC)에 9시간을 더해 한국 시간(KST) 구하기
+        now = datetime.utcnow() + timedelta(hours=9)
+        
+        # 15시 30분 이후 체크 (KST 기준)
         if not run_once and (now.hour > 15 or (now.hour == 15 and now.minute >= 30)):
-            print(f"🕒 현재 시간 {now.strftime('%H:%M:%S')} - 장 마감 시간(15:30)이 되어 수집을 종료합니다.")
+            print(f"🕒 현재 시간(KST) {now.strftime('%H:%M:%S')} - 장 마감 시간(15:30)이 되어 수집을 종료합니다.")
             break
 
         start_time = time.time()
-        print(f"=== 토스증권 수급 데이터 수집 시작 (시작 시각: {now.strftime('%H:%M:%S')}) ===")
+        print(f"=== 토스증권 수급 데이터 수집 시작 (시작 시각 KST: {now.strftime('%H:%M:%S')}) ===")
         
         try:
             get_toss_ranking("buy")  # 순매수
