@@ -23,10 +23,9 @@ def calculate_yg_score(df_pdf=None):
     if df_toss is None:
         return
 
-    # 2. ETF PDF 데이터 로드 (Supabase)
+    # 2. ETF PDF 로드 (인자가 없을 경우에만)
     if df_pdf is None:
-        if df_pdf is None:
-            df_pdf = load_etf_pdf_from_supabase()
+        df_pdf = load_etf_pdf_from_supabase()
     if df_pdf is None:
         return
 

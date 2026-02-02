@@ -115,10 +115,6 @@ def get_toss_ranking(ranking_type="buy"):
         
         # 📜 스크롤 다운
         last_height = driver.execute_script("return document.body.scrollHeight")
-        # PDF 데이터 최초 1회 로드
-        print("Loading ETF PDF data...")
-        cached_pdf_data = load_etf_pdf_from_supabase()
-
         while True:
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(2)
@@ -268,11 +264,11 @@ if __name__ == "__main__":
     while True:
         # 🕒 서버 시간(UTC)에 9시간을 더해 한국 시간(KST) 구하기
         now = datetime.utcnow() + timedelta(hours=9)
+        # 3분 테스트 제한
         
         # 15시 30분 이후 체크 (KST 기준)
         if not run_once and (now.hour > 15 or (now.hour == 15 and now.minute >= 30)):
             print(f"🕒 현재 시간(KST) {now.strftime('%H:%M:%S')} - 장 마감 시간(15:30)이 되어 수집을 종료합니다.")
-            break
 
         start_time = time.time()
         
@@ -301,7 +297,6 @@ if __name__ == "__main__":
         
         if run_once:
             print("🚀 1회 실행 모드 완료. 종료합니다.")
-            break
         
         elapsed_time = time.time() - start_time
         wait_time = 60 - elapsed_time
