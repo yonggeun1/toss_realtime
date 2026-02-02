@@ -219,6 +219,13 @@ def get_toss_ranking(ranking_type="buy"):
 
         # 결과 저장 (Supabase)
         if all_data:
+            # 중복 제거 (Supabase 에러 방지)
+            unique_map = {}
+            for item in all_data:
+                key = (item['investor'], item['stock_code'], item['ranking_type'], item['collected_at'])
+                unique_map[key] = item
+            all_data = list(unique_map.values())
+
             try:
                 # Supabase에 데이터 삽입 (upsert 사용)
                 # on_conflict: 고유 제약 조건 컬럼들 지정 (investor, stock_code, ranking_type, collected_at)
@@ -294,4 +301,5 @@ if __name__ == "__main__":
             time.sleep(wait_time)
         else:
             print("⏳ 대기 없이 바로 다음 수집 시작")
+
 
