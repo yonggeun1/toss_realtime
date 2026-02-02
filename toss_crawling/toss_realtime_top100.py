@@ -1,4 +1,4 @@
-﻿import time
+import time
 from datetime import datetime, timedelta
 import re
 import sys
@@ -60,9 +60,10 @@ def parse_date(date_str):
     """
     토스증권 날짜 형식(오늘, 어제, 1월 30일 등)을 YYYY-MM-DD 형식으로 변환
     """
-    today = datetime.now()
-    today_str = today.strftime('%Y-%m-%d')
-    current_year = today.year
+    # KST 기준 시간 사용
+    kst_now = datetime.utcnow() + timedelta(hours=9)
+    today_str = kst_now.strftime('%Y-%m-%d')
+    current_year = kst_now.year
     
     if not date_str:
         return today_str
@@ -71,7 +72,7 @@ def parse_date(date_str):
         return today_str
     
     if "어제" in date_str:
-        yesterday = today - timedelta(days=1)
+        yesterday = kst_now - timedelta(days=1)
         return yesterday.strftime('%Y-%m-%d')
     
     # 1월 30일 포맷
@@ -79,10 +80,9 @@ def parse_date(date_str):
     if match:
         month = int(match.group(1))
         day = int(match.group(2))
-        # 만약 현재 월보다 미래 월이 나오면 작년으로 처리해야 할 수도 있으나, 여기선 단순 처리
         return f"{current_year}-{month:02d}-{day:02d}"
 
-    # 이미 YYYY-MM-DD 형식이면 그대로 반환 (추후 확장성 고려)
+    # 이미 YYYY-MM-DD 형식이면 그대로 반환
     if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
         return date_str
         
@@ -168,6 +168,13 @@ def get_toss_ranking(ranking_type="buy"):
                             stock_code = ""
                     except:
                         stock_code = ""
+
+                    # 이름 보정 로직 (숫자/가격 형태인 경우 다음 줄 확인)
+                    # 정규식: 숫자, 콤마, %, 원, 공백, 기호(+, -) 등으로만 구성된 경우 이름이 아님
+                    if re.match(r'^["\d,.""%]+(원)?$', name):
+                        if len(text_lines) > 2:
+                            name = text_lines[2]
+                            # print(f"🔧 Corrected Name: {text_lines[1]} -> {name}")
                     
                     # 그룹 인덱스 증가 로직 (랭킹 1위가 다시 나오면 다음 그룹)
                     if rank == '1' and idx > 0:
@@ -199,10 +206,15 @@ def get_toss_ranking(ranking_type="buy"):
                     collected_time = parse_date(collected_time_raw)
 
                     # 🛑 오늘 날짜가 아니면 금액을 0으로 처리 (어제 데이터 등)
-                    today_str = datetime.now().strftime('%Y-%m-%d')
+                    # KST 기준 오늘 날짜 계산
+                    kst_now = datetime.utcnow() + timedelta(hours=9)
+                    today_str = kst_now.strftime('%Y-%m-%d')
+                    
                     if collected_time != today_str:
                         amount_val = 0
-                        # print(f"⚠️ [{group_name}] 지난 데이터({collected_time}) 감지 -> 금액 0 처리: {name}")
+                        # 디버깅 로그 (문제 발생 시 확인용)
+                        if idx < 3: 
+                            print(f"⚠️ [{group_name}] Date Mismatch: Collected({collected_time}) != Today({today_str}) -> Amount 0 for {name}")
 
                     # 데이터 저장용 dict 생성
                     all_data.append({
@@ -306,5 +318,3 @@ if __name__ == "__main__":
             time.sleep(wait_time)
         else:
             print("⏳ 대기 없이 바로 다음 수집 시작")
-
-
