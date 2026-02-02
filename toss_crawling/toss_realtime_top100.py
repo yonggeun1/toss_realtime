@@ -1,4 +1,4 @@
-import time
+﻿import time
 from datetime import datetime, timedelta
 import re
 import sys
@@ -12,13 +12,13 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 # Supabase 클라이언트 임포트
 try:
-    from toss_crawling.supabase_client import supabase, delete_old_scores
+    from toss_crawling.supabase_client import supabase, delete_old_scores, load_etf_pdf_from_supabase
     from toss_crawling.toss_realtime_score import calculate_yg_score
 except ImportError:
     # 로컬 실행 시 경로 문제 대비
     import os
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from supabase_client import supabase, delete_old_scores
+    from supabase_client import supabase, delete_old_scores, load_etf_pdf_from_supabase
     from toss_realtime_score import calculate_yg_score
 
 def parse_amount(amount_str):
@@ -244,6 +244,10 @@ if __name__ == "__main__":
     # --once 플래그 확인
     run_once = "--once" in sys.argv
 
+    # PDF 데이터 최초 1회 로드
+    print("Loading ETF PDF data...")
+    cached_pdf_data = load_etf_pdf_from_supabase()
+
     while True:
         # 🕒 서버 시간(UTC)에 9시간을 더해 한국 시간(KST) 구하기
         now = datetime.utcnow() + timedelta(hours=9)
@@ -268,7 +272,7 @@ if __name__ == "__main__":
             # 🚀 크롤링 완료 후 점수 계산 및 업데이트 실행
             print("\n📊 YG Score 계산 및 score 테이블 업데이트 시작...")
             try:
-                calculate_yg_score()
+                calculate_yg_score(df_pdf=cached_pdf_data)
                 print("✅ YG Score 업데이트 완료")
             except Exception as e:
                 print(f"❌ YG Score 업데이트 중 오류 발생: {e}")
@@ -290,3 +294,4 @@ if __name__ == "__main__":
             time.sleep(wait_time)
         else:
             print("⏳ 대기 없이 바로 다음 수집 시작")
+

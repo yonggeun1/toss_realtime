@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 import os
 import sys
 
@@ -17,14 +17,15 @@ from toss_crawling.supabase_client import (
     save_score_to_supabase
 )
 
-def calculate_yg_score():
+def calculate_yg_score(df_pdf=None):
     # 1. 실시간 수급 데이터 로드 (Supabase)
     df_toss = load_toss_data_from_supabase()
     if df_toss is None:
         return
 
     # 2. ETF PDF 데이터 로드 (Supabase)
-    df_pdf = load_etf_pdf_from_supabase()
+    if df_pdf is None:
+        df_pdf = load_etf_pdf_from_supabase()
     if df_pdf is None:
         return
 
