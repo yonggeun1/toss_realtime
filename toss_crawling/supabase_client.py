@@ -41,7 +41,8 @@ def load_toss_data_from_supabase():
             return None
 
         latest_timestamp = res.data[0]['collected_at']
-        target_date = latest_timestamp.split('T')[0]
+        # 'T' 또는 공백으로 분리하여 날짜 부분만 추출 (Timestamp 대응)
+        target_date = latest_timestamp.replace('T', ' ').split(' ')[0]
         print(f"📅 가장 최근 데이터 날짜: {target_date} (데이터 로드 중...)")
 
         # 해당 날짜의 데이터 범위 설정 (UTC 기준일 수 있으므로 하루를 포함)
@@ -185,7 +186,10 @@ def save_score_to_supabase(df):
         }, inplace=True)
         
         # 2. 업로드할 데이터 구성
-        current_time = datetime.utcnow().isoformat()
+        # [수정] 한국 시간(KST) 기준 Timestamp 사용
+        kst_now = datetime.utcnow() + timedelta(hours=9)
+        current_time = kst_now.isoformat()
+        
         upsert_cols = ['etf_code', 'etf_name', 'total_score', 'foreign_score', 'institution_score', 'holdings_count', 'updated_at']
         
         # updated_at 추가
@@ -223,9 +227,8 @@ def delete_old_scores():
         today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
         
         # 비교를 위해 UTC로 변환 (updated_at은 UTC로 저장됨)
-        # KST 00:00 -> UTC 전날 15:00
-        threshold_utc = today_start_kst - timedelta(hours=9)
-        threshold_str = threshold_utc.isoformat()
+        # [수정] save_score_to_supabase가 KST ISO 포맷으로 저장하므로, threshold도 KST ISO 포맷으로 설정
+        threshold_str = today_start_kst.isoformat()
 
         # 삭제 쿼리: updated_at < threshold
         response = supabase.table("score").delete().lt("updated_at", threshold_str).execute()
@@ -236,4 +239,3 @@ def delete_old_scores():
             
     except Exception as e:
         print(f"🚨 지난 데이터 삭제 오류: {e}")
-
