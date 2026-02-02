@@ -217,7 +217,7 @@ def save_score_to_supabase(df):
 
 def delete_old_scores():
     """
-    score 테이블에서 오늘(KST 기준) 이전의 데이터를 모두 삭제합니다.
+    score 및 toss_realtime_top100 테이블에서 오늘(KST 기준) 이전의 데이터를 모두 삭제합니다.
     즉, 실행일 당일의 데이터만 남깁니다.
     """
     try:
@@ -227,15 +227,23 @@ def delete_old_scores():
         today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
         
         # 비교를 위해 UTC로 변환 (updated_at은 UTC로 저장됨)
-        # [수정] save_score_to_supabase가 KST ISO 포맷으로 저장하므로, threshold도 KST ISO 포맷으로 설정
+        # [수정] KST ISO 포맷으로 저장하므로, threshold도 KST ISO 포맷으로 설정
         threshold_str = today_start_kst.isoformat()
 
-        # 삭제 쿼리: updated_at < threshold
+        # 삭제 쿼리 1: score 테이블 (updated_at < threshold)
         response = supabase.table("score").delete().lt("updated_at", threshold_str).execute()
         
         deleted_count = len(response.data) if response.data else 0
         if deleted_count > 0:
             print(f"🧹 지난 Score 데이터 삭제 완료: {deleted_count}건 (기준: {today_start_kst.strftime('%Y-%m-%d')} KST 이전)")
+
+        # 삭제 쿼리 2: toss_realtime_top100 테이블 (collected_at < threshold)
+        # collected_at이 KST Timestamp로 저장되므로 동일 기준 사용
+        response_top = supabase.table("toss_realtime_top100").delete().lt("collected_at", threshold_str).execute()
+        
+        deleted_count_top = len(response_top.data) if response_top.data else 0
+        if deleted_count_top > 0:
+            print(f"🧹 지난 Top100 데이터 삭제 완료: {deleted_count_top}건")
             
     except Exception as e:
         print(f"🚨 지난 데이터 삭제 오류: {e}")

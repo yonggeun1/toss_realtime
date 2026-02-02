@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 import os
 import sys
 
@@ -14,10 +14,13 @@ sys.path.append(project_root)
 from toss_crawling.supabase_client import (
     load_toss_data_from_supabase, 
     load_etf_pdf_from_supabase, 
-    save_score_to_supabase
+    save_score_to_supabase,
+    delete_old_scores
 )
 
 def calculate_yg_score(df_pdf=None):
+    # [변경] delete_old_scores() 제거됨 (호출 측에서 관리하거나 __main__에서 실행)
+    
     # 1. 실시간 수급 데이터 로드 (Supabase)
     df_toss = load_toss_data_from_supabase()
     if df_toss is None:
@@ -34,7 +37,6 @@ def calculate_yg_score(df_pdf=None):
     df_pivot = df_toss.pivot_table(index='종목코드', columns='투자자', values='금액', aggfunc='sum').fillna(0).reset_index()
 
     # 컬럼 매핑 (Supabase 저장 값 -> 로직 내부 변수명)
-    # Supabase에는 'Foreigner', 'Institution' 등으로 저장되어 있다고 가정
     col_mapping = {
         'Foreigner': '외국인_순매수',
         'Institution': '기관_순매수',
@@ -54,8 +56,6 @@ def calculate_yg_score(df_pdf=None):
     df_merged['기관_순매수'] = df_merged['기관_순매수'].fillna(0)
 
     # 5. YG Score 계산
-    # YG_SCORE = 구성비중(%) * (순매수금액) / 100 (가중치 개념)
-    # 금액 단위가 클 수 있으니 적절히 스케일링하거나 그대로 사용
     df_merged['YG_SCORE_외국인'] = df_merged['구성비중(%)'] * (df_merged['외국인_순매수'] * 100) / 100
     df_merged['YG_SCORE_기관'] = df_merged['구성비중(%)'] * (df_merged['기관_순매수'] * 100) / 100
     df_merged['YG_SCORE_합계'] = df_merged['YG_SCORE_외국인'] + df_merged['YG_SCORE_기관']
@@ -82,8 +82,6 @@ def calculate_yg_score(df_pdf=None):
     print("\n" + "="*80)
     print(f"📊 [실시간/Supabase] 수급 기반 ETF YG Score (Top 20)")
     print("="*80)
-    
-    # 전체 Top 20
     print(result[cols].head(20).to_string(index=False))
 
     print("\n" + "="*80)
@@ -98,4 +96,7 @@ def calculate_yg_score(df_pdf=None):
     return result
 
 if __name__ == "__main__":
+    # 단독 실행 시에는 오늘 이전 데이터를 정리
+    print("🧹 [Standalone] Cleaning up old scores...")
+    delete_old_scores()
     calculate_yg_score()
