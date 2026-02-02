@@ -115,6 +115,10 @@ def get_toss_ranking(ranking_type="buy"):
         
         # 📜 스크롤 다운
         last_height = driver.execute_script("return document.body.scrollHeight")
+        # PDF 데이터 최초 1회 로드
+        print("Loading ETF PDF data...")
+        cached_pdf_data = load_etf_pdf_from_supabase()
+
         while True:
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(2)
@@ -219,6 +223,12 @@ def get_toss_ranking(ranking_type="buy"):
 
         # 결과 저장 (Supabase)
         if all_data:
+            # 중복 제거 (Supabase 에러 방지)
+            unique_map = {}
+            for item in all_data:
+                key = (item["investor"], item["stock_code"], item["ranking_type"], item["collected_at"])
+                unique_map[key] = item
+            all_data = list(unique_map.values())
             # 중복 제거 (Supabase 에러 방지)
             unique_map = {}
             for item in all_data:
