@@ -50,18 +50,39 @@ def load_toss_data_from_supabase():
         end_date_dt = datetime.strptime(target_date, "%Y-%m-%d") + timedelta(days=1)
         end_date = end_date_dt.strftime("%Y-%m-%d")
 
-        # 2. 해당 날짜 데이터 쿼리
-        response = supabase.table("toss_realtime_top100") \
-            .select("*") \
-            .gte("collected_at", start_date) \
-            .lt("collected_at", end_date) \
-            .execute()
+        # 2. 해당 날짜 데이터 쿼리 (페이지네이션 적용)
+        all_data = []
+        limit = 1000
+        offset = 0
+        
+        print(f"⏳ 데이터 로드 중 (Range: {start_date} ~ {end_date})...", end='', flush=True)
 
-        if not response.data:
+        while True:
+            response = supabase.table("toss_realtime_top100") \
+                .select("*") \
+                .gte("collected_at", start_date) \
+                .lt("collected_at", end_date) \
+                .range(offset, offset + limit - 1) \
+                .execute()
+
+            if not response.data:
+                break
+            
+            all_data.extend(response.data)
+            
+            if len(response.data) < limit:
+                break
+                
+            offset += limit
+            print(".", end='', flush=True)
+            
+        print(f"\n✅ 데이터 로드 완료: 총 {len(all_data)}건")
+
+        if not all_data:
             print(f"🚨 {target_date} 날짜의 데이터를 가져오지 못했습니다.")
             return None
 
-        df = pd.DataFrame(response.data)
+        df = pd.DataFrame(all_data)
 
         # 3. 데이터 전처리
         # 매수(buy)는 양수, 매도(sell)는 음수로 변환
@@ -96,9 +117,24 @@ def load_toss_data_from_supabase():
 def load_etf_pdf_from_supabase():
     """
     Supabase의 etf_pdf 테이블에서 데이터를 로드하여 DataFrame으로 반환합니다.
-    데이터가 많을 경우 페이지네이션을 통해 모두 가져옵니다.
+    로컬에 etf_pdf_snapshot.csv 파일이 있으면 우선적으로 읽어옵니다.
     """
     try:
+        # 0. 로컬 CSV 스냅샷 확인
+        csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'etf_pdf_snapshot.csv')
+        if os.path.exists(csv_path):
+            try:
+                df_pdf = pd.read_csv(csv_path)
+                # 종목코드 포맷팅 (6자리 문자열)
+                if 'ETF종목코드' in df_pdf.columns:
+                    df_pdf['ETF종목코드'] = df_pdf['ETF종목코드'].astype(str).str.zfill(6)
+                if '구성종목코드' in df_pdf.columns:
+                    df_pdf['구성종목코드'] = df_pdf['구성종목코드'].astype(str).str.zfill(6)
+                print(f"✅ 로컬 CSV 스냅샷에서 ETF PDF 로드 완료: {len(df_pdf)}건")
+                return df_pdf
+            except Exception as e:
+                print(f"⚠️ 로컬 CSV 로드 실패 ({e}), Supabase에서 직접 로드합니다.")
+
         all_data = []
         limit = 1000
         offset = 0
