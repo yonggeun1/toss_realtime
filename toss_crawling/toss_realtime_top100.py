@@ -276,6 +276,7 @@ if __name__ == "__main__":
         # 15시 30분 이후 체크 (KST 기준)
         if not run_once and (now.hour > 15 or (now.hour == 15 and now.minute >= 30)):
             print(f"🕒 현재 시간(KST) {now.strftime('%H:%M:%S')} - 장 마감 시간(15:30)이 되어 수집을 종료합니다.")
+            break
 
         start_time = time.time()
         
