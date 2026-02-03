@@ -120,20 +120,20 @@ def load_etf_pdf_from_supabase():
     로컬에 etf_pdf_snapshot.csv 파일이 있으면 우선적으로 읽어옵니다.
     """
     try:
-        # 0. 로컬 CSV 스냅샷 확인
-        csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'etf_pdf_snapshot.csv')
-        if os.path.exists(csv_path):
-            try:
-                df_pdf = pd.read_csv(csv_path)
-                # 종목코드 포맷팅 (6자리 문자열)
-                if 'ETF종목코드' in df_pdf.columns:
-                    df_pdf['ETF종목코드'] = df_pdf['ETF종목코드'].astype(str).str.zfill(6)
-                if '구성종목코드' in df_pdf.columns:
-                    df_pdf['구성종목코드'] = df_pdf['구성종목코드'].astype(str).str.zfill(6)
-                print(f"✅ 로컬 CSV 스냅샷에서 ETF PDF 로드 완료: {len(df_pdf)}건")
-                return df_pdf
-            except Exception as e:
-                print(f"⚠️ 로컬 CSV 로드 실패 ({e}), Supabase에서 직접 로드합니다.")
+        # 0. 로컬 CSV 스냅샷 확인 (사용 안 함)
+        # csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'etf_pdf_snapshot.csv')
+        # if os.path.exists(csv_path):
+        #     try:
+        #         df_pdf = pd.read_csv(csv_path)
+        #         # 종목코드 포맷팅 (6자리 문자열)
+        #         if 'ETF종목코드' in df_pdf.columns:
+        #             df_pdf['ETF종목코드'] = df_pdf['ETF종목코드'].astype(str).str.zfill(6)
+        #         if '구성종목코드' in df_pdf.columns:
+        #             df_pdf['구성종목코드'] = df_pdf['구성종목코드'].astype(str).str.zfill(6)
+        #         print(f"✅ 로컬 CSV 스냅샷에서 ETF PDF 로드 완료: {len(df_pdf)}건")
+        #         return df_pdf
+        #     except Exception as e:
+        #         print(f"⚠️ 로컬 CSV 로드 실패 ({e}), Supabase에서 직접 로드합니다.")
 
         all_data = []
         limit = 1000
