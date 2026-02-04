@@ -25,31 +25,37 @@ def parse_amount(amount_str):
     if not amount_str:
         return 0
     try:
-        # "-" 제거 및 문자열 정제
-        amount_str = amount_str.replace("순매수", "").replace("순매도", "").replace(",", "").replace(" ", "").replace("-", "")
+        # "-", "원", "순매수/도" 등 불필요한 문자열 제거 및 정제
+        amount_str = amount_str.replace("순매수", "").replace("순매도", "").replace(",", "").replace(" ", "").replace("-", "").replace("원", "")
         total_amount = 0.0
         
+        # 조 단위 처리 (1조 = 10000억)
         if "조" in amount_str:
             parts = amount_str.split("조")
             try:
-                jo_part = float(parts[0])
-                total_amount += jo_part * 10000
+                if parts[0].strip():
+                    jo_part = float(parts[0])
+                    total_amount += jo_part * 10000
             except: pass
             amount_str = parts[1] if len(parts) > 1 else ""
             
+        # 억 단위 처리
         if "억" in amount_str:
             parts = amount_str.split("억")
             try:
-                uk_part = float(parts[0]) if parts[0] else 0
-                total_amount += uk_part
+                if parts[0].strip():
+                    uk_part = float(parts[0])
+                    total_amount += uk_part
             except: pass
             amount_str = parts[1] if len(parts) > 1 else ""
             
+        # 만 단위 처리 (1만 = 0.0001억)
         if "만" in amount_str:
             parts = amount_str.split("만")
             try:
-                man_part = float(parts[0]) if parts[0] else 0
-                total_amount += man_part / 10000
+                if parts[0].strip():
+                    man_part = float(parts[0])
+                    total_amount += man_part / 10000
             except: pass
             
         return round(total_amount, 4)
@@ -145,10 +151,11 @@ def get_toss_ranking(ranking_type="buy"):
 
         # 전체 종목 아이템 수집
         items = driver.find_elements(By.CSS_SELECTOR, "a[href*='/stocks/']")
-        print(f"📦 [{ranking_type}] Found {len(items)} items")
+        print(f"📦 [{ranking_type}] Found {len(items)} raw items")
 
         current_group_idx = 0
         groups = ["외국인", "기관", "개인", "기타"]
+        group_counts = {"외국인": 0, "기관": 0}
 
         # KST 기준 오늘 날짜 계산 (루프 밖에서 한 번 계산)
         kst_now = datetime.utcnow() + timedelta(hours=9)
@@ -159,12 +166,30 @@ def get_toss_ranking(ranking_type="buy"):
         for idx, item in enumerate(items):
             try:
                 raw_text = item.text
+                if not raw_text: continue
+                
                 text_lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
                 
                 if len(text_lines) >= 2:
                     rank = text_lines[0]
                     name = text_lines[1]
                     
+                    # 그룹 인덱스 증가 로직 (Rank '1'을 만났을 때 다음 그룹으로 이동)
+                    # 단, 너무 빨리 바뀌지 않도록 최소 개수(예: 90개) 이후에만 체크
+                    if rank == '1' and idx > 10: 
+                         if group_counts.get(groups[current_group_idx], 0) >= 90:
+                            current_group_idx += 1
+                            print(f"📌 [{ranking_type}] Switched to next group: {groups[current_group_idx]} at index {idx}")
+                    
+                    group_name = groups[current_group_idx] if current_group_idx < len(groups) else "Unknown"
+                    
+                    if group_name not in ["외국인", "기관"]:
+                        continue
+
+                    # 이미 해당 그룹 100개를 채웠다면 해당 아이템은 스킵
+                    if group_counts[group_name] >= 100:
+                        continue
+
                     # 🔍 종목코드 추출
                     try:
                         href = item.get_attribute("href")
@@ -175,46 +200,20 @@ def get_toss_ranking(ranking_type="buy"):
                     except:
                         stock_code = ""
 
-                    # 이름 보정 로직 (숫자/가격 형태인 경우 다음 줄 확인)
+                    # 이름 보정 로직
                     if re.match(r'^[0-9,.\-+\s%]+(원)?$', name):
-
                         if len(text_lines) > 2:
                             name = text_lines[2]
                     
-                    # 그룹 인덱스 증가 로직
-                    if rank == '1' and idx > 0:
-                        current_group_idx += 1
-                    
-                    group_name = groups[current_group_idx] if current_group_idx < len(groups) else "Unknown"
-                    
-                    if group_name not in ["외국인", "기관"]:
-                        continue
-
                     # 금액 정보 파싱
                     amount_str = ""
                     for line in text_lines[2:]:
-                        if "억" in line or "만" in line:
+                        if any(unit in line for unit in ["조", "억", "만"]):
                             amount_str = line.strip()
                             break 
                     
-                    if not amount_str and len(text_lines) > 2:
-                         for line in text_lines[2:]:
-                            if "원" not in line and "%" not in line:
-                                amount_str = line
-                                break
-                    
                     amount_val = parse_amount(amount_str)
                     
-                    # 날짜 파싱 (유효성 검사용)
-                    collected_time_raw = base_times.get(group_name, default_time)
-                    parsed_date_val = parse_date(collected_time_raw)
-
-                    # 🛑 오늘 날짜가 아니면 금액을 0으로 처리
-                    if parsed_date_val != today_str:
-                        amount_val = 0
-                        if idx < 3: 
-                            print(f"⚠️ [{group_name}] Date Mismatch: Collected({parsed_date_val}) != Today({today_str}) -> Amount 0 for {name}")
-
                     # 데이터 저장용 dict 생성
                     all_data.append({
                         "investor": group_name,
@@ -222,17 +221,21 @@ def get_toss_ranking(ranking_type="buy"):
                         "stock_code": stock_code,
                         "amount": amount_val,
                         "ranking_type": ranking_type,
-                        "collected_at": collected_at_kst  # KST Full Timestamp
+                        "collected_at": collected_at_kst
                     })
+                    group_counts[group_name] += 1
             except Exception as e:
                 continue
 
+        print(f"📊 [{ranking_type}] Final Counts -> 外: {group_counts.get('외국인', 0)}, 機: {group_counts.get('기관', 0)}")
+
         # 결과 저장 (Supabase)
         if all_data:
-            # 중복 제거
+            # 중복 제거 (investor, stock_code, stock_name 조합 기준)
             unique_map = {}
             for item in all_data:
-                key = (item["investor"], item["stock_code"], item["ranking_type"], item["collected_at"])
+                # stock_code가 없는 경우 name을 사용하여 고유성 유지
+                key = (item["investor"], item["stock_code"], item["stock_name"], item["ranking_type"])
                 unique_map[key] = item
             all_data = list(unique_map.values())
 

@@ -93,8 +93,9 @@ def load_toss_data_from_supabase():
         
         # 중복 제거: 동일 투자자, 종목, 매매타입에 대해 가장 마지막에 수집된 데이터만 사용
         # (실시간 크롤링이 누적될 경우 최신 스냅샷을 사용하기 위함)
-        df_dedup = df.sort_values(by=['investor', 'stock_code', 'collected_at']) \
-            .drop_duplicates(subset=['investor', 'stock_code', 'ranking_type'], keep='last')
+        # [수정] stock_code가 없는 경우(빈 문자열)를 위해 stock_name도 subset에 포함
+        df_dedup = df.sort_values(by=['investor', 'stock_code', 'stock_name', 'collected_at']) \
+            .drop_duplicates(subset=['investor', 'stock_code', 'stock_name', 'ranking_type'], keep='last')
 
         # 매수/매도 합산 (같은 종목에 대해 매수/매도 모두 있을 수 있음)
         df_total = df_dedup.groupby(['investor', 'stock_name', 'stock_code'], as_index=False)['final_amount'].sum()
@@ -243,7 +244,8 @@ def save_score_to_supabase(df):
         
         for i in range(0, total_count, batch_size):
             batch = data_to_upsert[i:i+batch_size]
-            res = supabase.table("score").upsert(batch).execute()
+            # [수정] etf_code와 updated_at을 모두 기준으로 삼아 이력이 쌓이도록 함
+            res = supabase.table("score").upsert(batch, on_conflict="etf_code, updated_at").execute()
             print(f"   - {i} ~ {i+len(batch)}건 저장 완료")
             
         print(f"✅ Supabase 'score' 테이블 전체 업데이트 완료: {total_count}건")
