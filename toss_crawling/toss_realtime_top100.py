@@ -260,25 +260,35 @@ def get_toss_ranking(ranking_type="buy"):
 
 if __name__ == "__main__":
     
-    # --once 플래그 확인
+    # 인자 확인
     run_once = "--once" in sys.argv
+    is_morning = "--session morning" in sys.argv
+    is_afternoon = "--session afternoon" in sys.argv
 
     # PDF 데이터 최초 1회 로드
     print("Loading ETF PDF data...")
     cached_pdf_data = load_etf_pdf_from_supabase()
 
-    # 🧹 [변경] 오늘 이전 데이터 삭제는 시작 시 1회만 수행
-    print("🧹 Cleaning up old data (older than today) before starting loop...")
-    delete_old_scores()
+    # 🧹 [변경] 오늘 이전 데이터 삭제는 시작 시 1회만 수행 (오전 세션 또는 단독 실행 시에만)
+    if not is_afternoon:
+        print("🧹 Cleaning up old data (older than today) before starting loop...")
+        delete_old_scores()
 
     while True:
         # 🕒 서버 시간(UTC)에 9시간을 더해 한국 시간(KST) 구하기
         now = datetime.utcnow() + timedelta(hours=9)
-        # 3분 테스트 제한
         
-        # 15시 30분 이후 체크 (KST 기준)
-        if not run_once and (now.hour > 15 or (now.hour == 15 and now.minute >= 30)):
-            print(f"🕒 현재 시간(KST) {now.strftime('%H:%M:%S')} - 장 마감 시간(15:30)이 되어 수집을 종료합니다.")
+        # 종료 시간 설정
+        # 기본은 15:30 종료
+        end_hour, end_minute = 15, 30
+        
+        # 오전 세션인 경우 12:00 종료
+        if is_morning:
+            end_hour, end_minute = 12, 0
+            
+        # 종료 조건 체크 (KST 기준)
+        if not run_once and (now.hour > end_hour or (now.hour == end_hour and now.minute >= end_minute)):
+            print(f"🕒 현재 시간(KST) {now.strftime('%H:%M:%S')} - 세션 종료 시간({end_hour:02d}:{end_minute:02d})이 되어 수집을 종료합니다.")
             break
 
         start_time = time.time()

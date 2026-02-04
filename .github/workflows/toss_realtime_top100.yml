@@ -1,12 +1,13 @@
-name: Toss Realtime Crawler
+name: Toss Realtime Crawler Sequential
 
 on:
-  workflow_dispatch: # 수동 실행 또는 외부 API(cron-job 등) 트리거용
+  workflow_dispatch: # 외부 트리거용 (수동 실행 포함)
 
 jobs:
-  build:
+  morning_session:
+    name: Morning Session (09:00 - 12:00)
     runs-on: ubuntu-latest
-    timeout-minutes: 420 # 7시간 제한 (08:50 ~ 15:30 커버)
+    timeout-minutes: 240 # 충분한 제한 시간
 
     steps:
     - uses: actions/checkout@v3
@@ -21,12 +22,40 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run Crawler (Continuous until 15:30 KST)
+    - name: Run Crawler (Morning)
       env:
         Project_URL: ${{ secrets.Project_URL }}
         Secret_keys: ${{ secrets.Secret_keys }}
       run: |
-        # PYTHONPATH 설정으로 모듈 경로 인식
         export PYTHONPATH=$PYTHONPATH:$(pwd)
-        # --once 옵션 제거: 15:30까지 루프 실행
-        python toss_crawling/toss_realtime_top100.py
+        # 12:00가 되면 스크립트 내부 로직에 의해 정상 종료됩니다.
+        python toss_crawling/toss_realtime_top100.py --session morning
+
+  afternoon_session:
+    name: Afternoon Session (12:00 - 15:30)
+    needs: morning_session
+    if: always() # 오전 세션 결과와 상관없이 오후 세션 실행
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.9"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run Crawler (Afternoon)
+      env:
+        Project_URL: ${{ secrets.Project_URL }}
+        Secret_keys: ${{ secrets.Secret_keys }}
+      run: |
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        # 오후 세션은 기존처럼 15:30에 종료됩니다.
+        python toss_crawling/toss_realtime_top100.py --session afternoon
