@@ -36,7 +36,7 @@ jobs:
     needs: morning_session
     if: always() # 오전 세션 결과와 상관없이 오후 세션 실행
     runs-on: ubuntu-latest
-    timeout-minutes: 200
+    timeout-minutes: 201
 
     steps:
       - uses: actions/checkout@v3
