@@ -207,12 +207,19 @@ def get_toss_ranking(ranking_type="buy"):
                     
                     # 금액 정보 파싱
                     amount_str = ""
-                    for line in text_lines[2:]:
+                    is_yesterday = False
+                    for line in text_lines:
+                        if "어제" in line:
+                            is_yesterday = True
                         if any(unit in line for unit in ["조", "억", "만"]):
                             amount_str = line.strip()
-                            break 
                     
-                    amount_val = parse_amount(amount_str)
+                    # "어제" 데이터인 경우 금액을 0으로 강제 설정
+                    if is_yesterday:
+                        amount_val = 0.0
+                        print(f"⚠️ [{ranking_type}] {group_name} - {name} ({stock_code}) 데이터가 '어제' 것이므로 0으로 처리합니다.")
+                    else:
+                        amount_val = parse_amount(amount_str)
                     
                     # 데이터 저장용 dict 생성
                     all_data.append({
