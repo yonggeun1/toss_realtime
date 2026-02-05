@@ -18,18 +18,32 @@ from toss_crawling.supabase_client import (
     delete_old_scores
 )
 
-def calculate_yg_score(df_pdf=None):
-    # [변경] delete_old_scores() 제거됨 (호출 측에서 관리하거나 __main__에서 실행)
+# 전역 변수로 캐시 관리
+_cached_pdf = None
+
+def calculate_yg_score(df_pdf=None, force_load=False):
+    global _cached_pdf
     
-    # 1. 실시간 수급 데이터 로드 (Supabase)
+    # 1. 실시간 수급 데이터 로드 (Supabase) - 이건 매번 가져와야 함
     df_toss = load_toss_data_from_supabase()
     if df_toss is None:
         return
 
-    # 2. ETF PDF 로드 (인자가 없을 경우에만)
-    if df_pdf is None:
-        df_pdf = load_etf_pdf_from_supabase()
-    if df_pdf is None:
+    # 2. ETF PDF 로드 (캐싱 로직 적용)
+    if df_pdf is not None:
+        # 외부에서 명시적으로 넘겨준 경우 사용
+        pdf_to_use = df_pdf
+    elif _cached_pdf is not None and not force_load:
+        # 메모리에 캐시가 있고 강제 로드가 아니면 캐시 사용
+        pdf_to_use = _cached_pdf
+    else:
+        # 캐시가 없거나 강제 로드인 경우 Supabase에서 가져옴
+        print("🔄 [Cache] Loading ETF PDF from Supabase...")
+        _cached_pdf = load_etf_pdf_from_supabase()
+        pdf_to_use = _cached_pdf
+
+    if pdf_to_use is None:
+        print("⚠️ [Error] ETF PDF 데이터를 불러올 수 없습니다.")
         return
 
     # 3. 데이터 피벗 (투자자별 컬럼 분리)
@@ -50,7 +64,7 @@ def calculate_yg_score(df_pdf=None):
     if '기관_순매수' not in df_pivot.columns: df_pivot['기관_순매수'] = 0
 
     # 4. ETF 구성종목과 수급 데이터 병합
-    df_merged = pd.merge(df_pdf, df_pivot, left_on='구성종목코드', right_on='종목코드', how='left')
+    df_merged = pd.merge(pdf_to_use, df_pivot, left_on='구성종목코드', right_on='종목코드', how='left')
 
     df_merged['외국인_순매수'] = df_merged['외국인_순매수'].fillna(0)
     df_merged['기관_순매수'] = df_merged['기관_순매수'].fillna(0)
