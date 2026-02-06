@@ -109,203 +109,162 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
     # ranking_type: 'buy' (순매수) or 'sell' (순매도)
     ranking_name = "순매수" if ranking_type == "buy" else "순매도"
     
-    # [수정] 외부에서 받은 시간이 없으면 현재 시간 생성
     if collected_at is None:
         kst_now = datetime.utcnow() + timedelta(hours=9)
         collected_at = kst_now.isoformat()
     
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,3000")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        print(f"🚀 [{ranking_type}] 연결 시도 {attempt}/{max_retries}: https://www.tossinvest.com/?ranking-type=domestic_investor_trend&ranking={ranking_type}")
+        
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--window-size=1920,5000")
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    url = f"https://www.tossinvest.com/?ranking-type=domestic_investor_trend&ranking={ranking_type}"
-    
-    all_data = []
-    
-    try:
-        print(f"🚀 [{ranking_type}] Connecting to: {url}")
-        driver.get(url)
-        wait = WebDriverWait(driver, 15)
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        url = f"https://www.tossinvest.com/?ranking-type=domestic_investor_trend&ranking={ranking_type}"
         
-        # 리스트 아이템 로딩 대기
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "a[href*='/stocks/']")))
-        time.sleep(5) 
+        all_data = []
         
-        # 📜 스크롤 다운
-        last_height = driver.execute_script("return document.body.scrollHeight")
-        while True:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
-            new_height = driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:
-                break
-            last_height = new_height
-        print(f"📜 [{ranking_type}] Page scroll completed")
-        
-        # 🕒 기준 시간 추출 (투자자별)
-        base_times = {}
-        
-        # [개선] 더 유연한 방식으로 섹션별 기준 시간 추출
         try:
-            # 모든 섹션(section)을 돌며 내부의 '외국인', '기관' 텍스트와 시간(span)을 찾음
-            sections = driver.find_elements(By.TAG_NAME, "section")
-            for sec in sections:
-                sec_text = sec.text
-                if "외국인" in sec_text or "기관" in sec_text:
-                    inv_type = "외국인" if "외국인" in sec_text else "기관"
-                    # 해당 섹션 내에서 ':'가 포함된 span(시간) 찾기
-                    spans = sec.find_elements(By.TAG_NAME, "span")
-                    for s in spans:
-                        t_text = s.text.strip()
-                        if ":" in t_text and ("오늘" in t_text or "어제" in t_text or "기준" in t_text):
-                            base_times[inv_type] = t_text
-                            break
-            print(f"🕒 [{ranking_type}] Detected Base Times: {base_times}")
-        except Exception as e:
-            print(f"⚠️ [{ranking_type}] Base Time extraction failed: {e}")
-
-        default_time = time.strftime('%Y-%m-%d %H:%M:%S')
-        if "외국인" not in base_times: base_times["외국인"] = default_time
-        if "기관" not in base_times: base_times["기관"] = default_time
-
-        # 전체 종목 아이템 수집
-        items = driver.find_elements(By.CSS_SELECTOR, "a[href*='/stocks/']")
-        print(f"📦 [{ranking_type}] Found {len(items)} raw items")
-
-        current_group_idx = 0
-        groups = ["외국인", "기관", "개인", "기타"]
-        group_counts = {"외국인": 0, "기관": 0}
-
-        for idx, item in enumerate(items):
+            driver.get(url)
+            wait = WebDriverWait(driver, 20)
+            
+            # 리스트 아이템 로딩 대기
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "a[href*='/stocks/']")))
+            time.sleep(5) # 초기 렌더링 대기
+            
+            # 📜 충분한 스크롤 다운 (데이터 200개를 다 불러오기 위해 반복)
+            for _ in range(5):
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(2)
+            
+            # 🕒 기준 시간 추출 (투자자별)
+            base_times = {}
             try:
-                raw_text = item.text
-                if not raw_text: continue
-                
-                text_lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
-                
-                if len(text_lines) >= 2:
-                    rank = text_lines[0]
-                    name = text_lines[1]
-                    
-                    # 그룹 인덱스 증가 로직 (Rank '1'을 만났을 때 다음 그룹으로 이동)
-                    # 단, 너무 빨리 바뀌지 않도록 최소 개수(예: 90개) 이후에만 체크
-                    if rank == '1' and idx > 10: 
-                         if group_counts.get(groups[current_group_idx], 0) >= 90:
-                            current_group_idx += 1
-                            print(f"📌 [{ranking_type}] Switched to next group: {groups[current_group_idx]} at index {idx}")
-                    
-                    group_name = groups[current_group_idx] if current_group_idx < len(groups) else "Unknown"
-                    
-                    if group_name not in ["외국인", "기관"]:
-                        continue
+                sections = driver.find_elements(By.TAG_NAME, "section")
+                for sec in sections:
+                    sec_text = sec.text
+                    if "외국인" in sec_text or "기관" in sec_text:
+                        inv_type = "외국인" if "외국인" in sec_text else "기관"
+                        spans = sec.find_elements(By.TAG_NAME, "span")
+                        for s in spans:
+                            t_text = s.text.strip()
+                            if ":" in t_text and ("오늘" in t_text or "어제" in t_text or "기준" in t_text):
+                                base_times[inv_type] = t_text
+                                break
+                print(f"🕒 [{ranking_type}] 검출된 기준 시각: {base_times}")
+            except: pass
 
-                    # 이미 해당 그룹 100개를 채웠다면 해당 아이템은 스킵
-                    if group_counts[group_name] >= 100:
-                        continue
+            # 기본 시간 설정
+            default_time = time.strftime('%Y-%m-%d %H:%M:%S')
+            if "외국인" not in base_times: base_times["외국인"] = default_time
+            if "기관" not in base_times: base_times["기관"] = default_time
 
-                    # 🔍 종목코드 추출 (더 유연한 방식)
-                    try:
-                        href = item.get_attribute("href")
-                        # 국내 주식 코드는 보통 /stocks/A005930 또는 /stocks/005930 형태임
-                        code_match = re.search(r'/stocks/(?:A)?([0-9A-Z]{6,})', href)
-                        if code_match:
-                            stock_code = code_match.group(1)
-                        else:
-                            stock_code = ""
-                    except:
-                        stock_code = ""
-
-                    # 국내 주식(6자리 숫자 등)이 아니면 ETF 분석에 의미가 없으므로 스킵 시도할 수 있으나,
-                    # 우선은 모든 코드를 수집하여 상태를 확인합니다.
-                    if not stock_code:
-                        # 코드가 없으면 중복 제거 시 이름으로 구분하기 위해 임시 처리
-                        pass
-
-                    # 이름 보정 로직
-                    if re.match(r'^[0-9,.\-+\s%]+(원)?$', name):
-                        if len(text_lines) > 2:
-                            name = text_lines[2]
-                    
-                    # 금액 정보 파싱
-                    amount_str = ""
-                    # [수정] 해당 그룹(외국인/기관)의 헤더 시간이 '어제'인지 확인하여 금액 0 처리
-                    group_base_time = base_times.get(group_name, "")
-                    is_yesterday = "어제" in group_base_time
-                    
-                    for line in text_lines:
-                        # 종목 텍스트 자체에 '어제'가 포함된 경우도 체크 (안전장치)
-                        if "어제" in line:
-                            is_yesterday = True
-                        if any(unit in line for unit in ["조", "억", "만"]):
-                            amount_str = line.strip()
-                    
-                    # "어제" 데이터인 경우 금액을 0으로 강제 설정
-                    if is_yesterday:
-                        amount_val = 0.0
-                        print(f"⚠️ [{ranking_type}] {group_name} - {name} ({stock_code}) 데이터가 '{group_base_time}' 것이므로 0으로 처리합니다.")
-                    else:
-                        amount_val = parse_amount(amount_str)
-                    
-                    # 데이터 저장용 dict 생성
-                    all_data.append({
-                        "investor": group_name,
-                        "stock_name": name,
-                        "stock_code": stock_code,
-                        "amount": amount_val,
-                        "ranking_type": ranking_type,
-                        "collected_at": collected_at
-                    })
-                    group_counts[group_name] += 1
-            except Exception as e:
-                continue
-
-        print(f"📊 [{ranking_type}] Final Counts -> 外: {group_counts.get('외국인', 0)}, 機: {group_counts.get('기관', 0)}")
-
-        # 결과 저장 (Supabase)
-        if all_data:
-            # [중요] 중복 제거 및 유효성 검사
-            unique_map = {}
-            no_code_count = 0
-            for item in all_data:
-                if not item["stock_code"]:
-                    no_code_count += 1
-                    # 코드가 없으면 (이름, 투자자) 조합으로 키 생성하여 뭉침 방지 (로그용)
-                    key = (item["investor"], f"NO_CODE_{item['stock_name']}", item["ranking_type"], item["collected_at"])
-                else:
-                    key = (item["investor"], item["stock_code"], item["ranking_type"], item["collected_at"])
-                unique_map[key] = item
+            # 전체 종목 아이템 수집
+            items = driver.find_elements(By.CSS_SELECTOR, "a[href*='/stocks/']")
             
-            all_data = list(unique_map.values())
-            
-            # 실제 DB에 넣을 때는 코드가 있는 것만 넣는 것이 안전함 (제약조건 때문)
-            valid_data = [d for d in all_data if d["stock_code"]]
-            
-            print(f"📦 [{ranking_type}] 총 수집: {len(all_data)}개 (코드 없음: {no_code_count}개, DB 저장 대상: {len(valid_data)}개)")
+            current_group_idx = 0
+            groups = ["외국인", "기관", "개인", "기타"]
+            group_counts = {"외국인": 0, "기관": 0}
 
-            if valid_data:
+            for idx, item in enumerate(items):
                 try:
-                    # Supabase에 데이터 삽입 (upsert 사용)
-                    response = supabase.table("toss_realtime_top100").upsert(
-                        valid_data, 
-                        on_conflict="investor, stock_code, ranking_type, collected_at"
-                    ).execute()
-                    print(f"🎉 [{ranking_type}] Supabase Save Complete (Total {len(valid_data)} items)")
-                except Exception as e:
-                    print(f"❌ [{ranking_type}] Supabase Save Error: {e}")
-            else:
-                print(f"⚠️ [{ranking_type}] 유효한 종목코드가 있는 데이터가 없습니다.")
+                    raw_text = item.text
+                    if not raw_text: continue
+                    text_lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+                    
+                    if len(text_lines) >= 2:
+                        rank = text_lines[0]
+                        name = text_lines[1]
+                        
+                        # 그룹 전환 로직: 랭킹 '1'을 만나면 다음 그룹으로 이동
+                        # 단, 이전 그룹이 충분히 수집되었을 때만 전환 (토스 리스트 특성 반영)
+                        if rank == '1' and idx > 10: 
+                             if group_counts.get(groups[current_group_idx], 0) >= 80:
+                                current_group_idx += 1
+                        
+                        group_name = groups[current_group_idx] if current_group_idx < len(groups) else "Unknown"
+                        
+                        if group_name not in ["외국인", "기관"]: continue
+                        if group_counts[group_name] >= 100: continue
+
+                        # 🔍 종목코드 추출 (강화된 정규식)
+                        try:
+                            href = item.get_attribute("href")
+                            code_match = re.search(r'/stocks/(?:A)?([0-9A-Z]{6,})', href)
+                            stock_code = code_match.group(1) if code_match else ""
+                        except: stock_code = ""
+
+                        # 금액 정보 파싱 및 어제 데이터 0 처리
+                        group_base_time = base_times.get(group_name, "")
+                        is_yesterday = "어제" in group_base_time
+                        amount_str = ""
+                        for line in text_lines:
+                            if "어제" in line: is_yesterday = True
+                            if any(unit in line for unit in ["조", "억", "만"]):
+                                amount_str = line.strip()
+                        
+                        amount_val = 0.0 if is_yesterday else parse_amount(amount_str)
+                        
+                        all_data.append({
+                            "investor": group_name,
+                            "stock_name": name,
+                            "stock_code": stock_code,
+                            "amount": amount_val,
+                            "ranking_type": ranking_type,
+                            "collected_at": collected_at
+                        })
+                        group_counts[group_name] += 1
+                except: continue
+
+            print(f"📊 [{ranking_type}] 수집 결과 -> 外: {group_counts.get('외국인', 0)}, 機: {group_counts.get('기관', 0)}")
+
+            # 🛑 [검증] 외국인 100개, 기관 100개가 모두 수집되었는지 확인
+            if group_counts.get("외국인", 0) >= 100 and group_counts.get("기관", 0) >= 100:
+                print(f"✅ [{ranking_type}] 목표치(200개) 달성! 저장을 시작합니다.")
                 
-        else:
-            print(f"❌ [{ranking_type}] No collected data.")
+                # 중복 제거 및 저장 로직
+                unique_map = {}
+                no_code_count = 0
+                for item in all_data:
+                    if not item["stock_code"]:
+                        no_code_count += 1
+                        key = (item["investor"], f"NO_CODE_{item['stock_name']}", item["ranking_type"], item["collected_at"])
+                    else:
+                        key = (item["investor"], item["stock_code"], item["ranking_type"], item["collected_at"])
+                    unique_map[key] = item
+                
+                valid_data = [d for d in unique_map.values() if d["stock_code"]]
+                print(f"📦 [{ranking_type}] 최종 유효 데이터: {len(valid_data)}개 (코드 없음 {no_code_count}개 제외)")
+
+                if valid_data:
+                    try:
+                        supabase.table("toss_realtime_top100").upsert(
+                            valid_data, on_conflict="investor, stock_code, ranking_type, collected_at"
+                        ).execute()
+                        print(f"🎉 [{ranking_type}] Supabase 저장 완료")
+                        driver.quit()
+                        return # 성공 시 함수 종료
+                    except Exception as e:
+                        print(f"❌ [{ranking_type}] 저장 에러: {e}")
+                
+            else:
+                print(f"⚠️ [{ranking_type}] 수집 데이터 부족 (外:{group_counts.get('외국인')}, 機:{group_counts.get('기관')}). 재시도합니다.")
+            
+        except Exception as e:
+            print(f"❌ [{ranking_type}] 오류 발생: {e}")
+        finally:
+            driver.quit()
         
-    except Exception as e:
-        print(f"❌ [{ranking_name}] 오류 발생: {e}")
-    finally:
-        driver.quit()
+        # 재시도 전 대기
+        time.sleep(5)
+    
+    print(f"🚨 [{ranking_type}] {max_retries}회 시도에도 불구하고 목표 데이터를 모두 수집하지 못했습니다.")
+
 
 if __name__ == "__main__":
     
