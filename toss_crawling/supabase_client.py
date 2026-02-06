@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 def load_toss_data_from_supabase():
     """
     Supabase에서 가장 최근 수집된 날짜의 데이터를 로드하여 DataFrame으로 반환합니다.
+    (데이터프레임과 데이터의 실제 수집 시각(collected_at)을 함께 반환)
     """
     try:
         # 1. 가장 최근 수집된 날짜 확인
@@ -38,7 +39,7 @@ def load_toss_data_from_supabase():
 
         if not res.data:
             print("🚨 Supabase에 데이터가 없습니다.")
-            return None
+            return None, None
 
         latest_timestamp = res.data[0]['collected_at']
         # 'T' 또는 공백으로 분리하여 날짜 부분만 추출 (Timestamp 대응)
@@ -80,9 +81,12 @@ def load_toss_data_from_supabase():
 
         if not all_data:
             print(f"🚨 {target_date} 날짜의 데이터를 가져오지 못했습니다.")
-            return None
+            return None, None
 
         df = pd.DataFrame(all_data)
+        
+        # 실제 데이터 중 가장 최신 수집 시각 추출
+        actual_latest_at = df['collected_at'].max()
 
         # 3. 데이터 전처리
         # 매수(buy)는 양수, 매도(sell)는 음수로 변환
@@ -93,7 +97,6 @@ def load_toss_data_from_supabase():
         
         # 중복 제거: 동일 투자자, 종목, 매매타입에 대해 가장 마지막에 수집된 데이터만 사용
         # (실시간 크롤링이 누적될 경우 최신 스냅샷을 사용하기 위함)
-        # [수정] stock_code가 없는 경우(빈 문자열)를 위해 stock_name도 subset에 포함
         df_dedup = df.sort_values(by=['investor', 'stock_code', 'stock_name', 'collected_at']) \
             .drop_duplicates(subset=['investor', 'stock_code', 'stock_name', 'ranking_type'], keep='last')
 
@@ -108,8 +111,12 @@ def load_toss_data_from_supabase():
             'final_amount': '금액'
         }, inplace=True)
 
-        print(f"✅ Supabase 데이터 로드 및 통합 완료: {len(df_total)}건 (기준일: {target_date})")
-        return df_total
+        print(f"✅ Supabase 데이터 로드 및 통합 완료: {len(df_total)}건 (기준시각: {actual_latest_at})")
+        return df_total, actual_latest_at
+
+    except Exception as e:
+        print(f"🚨 Supabase 데이터 로드 중 에러 발생: {e}")
+        return None, None
 
     except Exception as e:
         print(f"🚨 Supabase 데이터 로드 중 에러 발생: {e}")
@@ -201,10 +208,10 @@ def load_etf_pdf_from_supabase():
         print(f"🚨 Supabase ETF PDF 로드 중 에러 발생: {e}")
         return None
 
-def save_score_to_supabase(df):
+def save_score_to_supabase(df, target_time=None):
     """
     계산된 YG Score 결과를 Supabase 'score' 테이블에 저장(Upsert)합니다.
-    모든 데이터를 강제로 업데이트합니다.
+    target_time이 제공되면 해당 시간을 updated_at으로 사용하고, 없으면 현재 시간을 사용합니다.
     """
     try:
         if df is None or df.empty:
@@ -223,9 +230,12 @@ def save_score_to_supabase(df):
         }, inplace=True)
         
         # 2. 업로드할 데이터 구성
-        # [수정] 한국 시간(KST) 기준 Timestamp 사용
-        kst_now = datetime.utcnow() + timedelta(hours=9)
-        current_time = kst_now.isoformat()
+        # target_time이 있으면 사용, 없으면 현재 KST 시간 생성
+        if target_time:
+            current_time = target_time
+        else:
+            kst_now = datetime.utcnow() + timedelta(hours=9)
+            current_time = kst_now.isoformat()
         
         upsert_cols = ['etf_code', 'etf_name', 'total_score', 'foreign_score', 'institution_score', 'holdings_count', 'updated_at']
         
