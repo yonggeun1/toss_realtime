@@ -113,6 +113,14 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
         kst_now = datetime.utcnow() + timedelta(hours=9)
         collected_at = kst_now.isoformat()
     
+    # 🕒 [추가] 09:00 ~ 09:40 장 초반 보호 로직 여부 판단
+    is_opening_period = False
+    try:
+        dt_collected = datetime.fromisoformat(collected_at)
+        if dt_collected.hour == 9 and 0 <= dt_collected.minute < 40:
+            is_opening_period = True
+    except: pass
+
     max_retries = 3
     for attempt in range(1, max_retries + 1):
         print(f"🚀 [{ranking_type}] 연결 시도 {attempt}/{max_retries}: https://www.tossinvest.com/?ranking-type=domestic_investor_trend&ranking={ranking_type}")
@@ -143,26 +151,53 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
                 time.sleep(2)
             
             # 🕒 기준 시간 추출 (투자자별)
-            base_times = {}
+            base_times = {"외국인": "", "기관": ""}
             try:
-                sections = driver.find_elements(By.TAG_NAME, "section")
-                for sec in sections:
-                    sec_text = sec.text
-                    if "외국인" in sec_text or "기관" in sec_text:
-                        inv_type = "외국인" if "외국인" in sec_text else "기관"
-                        spans = sec.find_elements(By.TAG_NAME, "span")
-                        for s in spans:
-                            t_text = s.text.strip()
-                            if ":" in t_text and ("오늘" in t_text or "어제" in t_text or "기준" in t_text):
-                                base_times[inv_type] = t_text
-                                break
+                # 1. 모든 "기준"이 포함된 span을 찾아 근처의 투자자명(외국인/기관)을 확인
+                spans = driver.find_elements(By.XPATH, "//span[contains(text(), '기준') and (contains(text(), '오늘') or contains(text(), '어제'))]")
+                for s in spans:
+                    t_text = s.text.strip()
+                    # 해당 span의 부모 요소들을 확인하여 외국인/기관 섹션인지 판별
+                    try:
+                        # 위로 4단계 정도의 부모 텍스트 확인 (hgroup, section 등)
+                        curr = s
+                        parent_text = ""
+                        for _ in range(4):
+                            try:
+                                curr = curr.find_element(By.XPATH, "..")
+                                parent_text += curr.text
+                            except: break
+                        
+                        if "외국인" in parent_text and not base_times["외국인"]:
+                            base_times["외국인"] = t_text
+                        if "기관" in parent_text and not base_times["기관"]:
+                            base_times["기관"] = t_text
+                    except: pass
+
+                # 2. [보안] 명시적인 섹션 탐색 (사용자 제공 구조 반영: //section[2] 등)
+                if not base_times["기관"] or not base_times["외국인"]:
+                    sections = driver.find_elements(By.TAG_NAME, "section")
+                    for sec in sections:
+                        sec_text = sec.text
+                        if "외국인" in sec_text and not base_times["외국인"]:
+                            for s in sec.find_elements(By.TAG_NAME, "span"):
+                                if ":" in s.text and ("오늘" in s.text or "어제" in s.text):
+                                    base_times["외국인"] = s.text.strip()
+                                    break
+                        if "기관" in sec_text and not base_times["기관"]:
+                            for s in sec.find_elements(By.TAG_NAME, "span"):
+                                if ":" in s.text and ("오늘" in s.text or "어제" in s.text):
+                                    base_times["기관"] = s.text.strip()
+                                    break
+                
                 print(f"🕒 [{ranking_type}] 검출된 기준 시각: {base_times}")
-            except: pass
+            except Exception as e:
+                print(f"⚠️ 기준 시각 검출 중 오류: {e}")
 
             # 기본 시간 설정
             default_time = time.strftime('%Y-%m-%d %H:%M:%S')
-            if "외국인" not in base_times: base_times["외국인"] = default_time
-            if "기관" not in base_times: base_times["기관"] = default_time
+            if not base_times.get("외국인"): base_times["외국인"] = default_time
+            if not base_times.get("기관"): base_times["기관"] = default_time
 
             # 전체 종목 아이템 수집
             items = driver.find_elements(By.CSS_SELECTOR, "a[href*='/stocks/']")
@@ -202,6 +237,17 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
                         # 금액 정보 파싱 및 어제 데이터 0 처리
                         group_base_time = base_times.get(group_name, "")
                         is_yesterday = "어제" in group_base_time
+                        
+                        # 🛡️ [추가] 09:00~09:40 사이 기관 데이터 강제 0 처리 (어제 금액 유입 방지)
+                        if group_name == "기관" and is_opening_period:
+                            is_yesterday = True
+                            if group_counts[group_name] == 0:
+                                print(f"🛡️ [기관] 장 초반(09:00~09:40) 보호 로직 작동: 금액을 0으로 고정합니다.")
+
+                        # [디버그] 기관 데이터가 어제인 경우 로그 출력 (장 초반 보호 로직 제외)
+                        if group_name == "기관" and is_yesterday and group_counts[group_name] == 0 and not is_opening_period:
+                            print(f"ℹ️ [기관] 섹션이 '어제'로 감지되었습니다. 모든 금액을 0으로 처리합니다. (기준: {group_base_time})")
+
                         amount_str = ""
                         for line in text_lines:
                             if "어제" in line: is_yesterday = True
