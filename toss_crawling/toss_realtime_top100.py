@@ -113,11 +113,11 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
         kst_now = datetime.utcnow() + timedelta(hours=9)
         collected_at = kst_now.isoformat()
     
-    # 🕒 [추가] 09:00 ~ 09:40 장 초반 보호 로직 여부 판단
+    # 🕒 [추가] 09:00 ~ 10:00 장 초반 보호 로직 여부 판단
     is_opening_period = False
     try:
         dt_collected = datetime.fromisoformat(collected_at)
-        if dt_collected.hour == 9 and 0 <= dt_collected.minute < 40:
+        if dt_collected.hour == 9:
             is_opening_period = True
     except: pass
 
@@ -238,11 +238,11 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
                         group_base_time = base_times.get(group_name, "")
                         is_yesterday = "어제" in group_base_time
                         
-                        # 🛡️ [추가] 09:00~09:40 사이 기관 데이터 강제 0 처리 (어제 금액 유입 방지)
+                        # 🛡️ [추가] 09:00~10:00 사이 기관 데이터 강제 0 처리 (어제 금액 유입 방지)
                         if group_name == "기관" and is_opening_period:
                             is_yesterday = True
                             if group_counts[group_name] == 0:
-                                print(f"🛡️ [기관] 장 초반(09:00~09:40) 보호 로직 작동: 금액을 0으로 고정합니다.")
+                                print(f"🛡️ [기관] 장 초반(09:00~10:00) 보호 로직 작동: 금액을 0으로 고정합니다.")
 
                         # [디버그] 기관 데이터가 어제인 경우 로그 출력 (장 초반 보호 로직 제외)
                         if group_name == "기관" and is_yesterday and group_counts[group_name] == 0 and not is_opening_period:
