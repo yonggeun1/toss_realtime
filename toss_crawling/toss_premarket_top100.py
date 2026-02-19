@@ -175,15 +175,11 @@ def get_toss_amount_ranking(collected_at=None):
 
             if len(all_data) >= 80: # 최소 80개 이상 수집 시 성공으로 간주
                 try:
-                    # [수정] 기존 데이터를 모두 삭제하여 항상 최신 스냅샷만 유지
-                    print("🧹 기존 거래대금 데이터를 삭제합니다 (최신 데이터만 유지)...")
-                    supabase.table("toss_premarket_top100").delete().neq("rank", -1).execute()
-
-                    # 신규 데이터 저장
+                    # 신규 데이터 저장 (삭제 로직 제거됨, 데이터 누적)
                     supabase.table("toss_premarket_top100").upsert(
                         all_data, on_conflict="stock_code, collected_at"
                     ).execute()
-                    print(f"🎉 [거래대금] Supabase 저장 완료 (최신 100개 갱신)")
+                    print(f"🎉 [거래대금] Supabase 저장 완료 (데이터 누적)")
                     driver.quit()
                     return
                 except Exception as e:
