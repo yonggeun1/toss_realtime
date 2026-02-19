@@ -76,7 +76,7 @@ def parse_amount(amount_str):
 def get_toss_amount_ranking(collected_at=None):
     """
     거래대금 상위 100개 종목을 수집하는 함수
-    URL: https://www.tossinvest.com/?market=kr&live-chart=biggest_total_amount&ranking-type=realtime_chart
+    URL: https://www.tossinvest.com/?market=kr&live-chart=biggest_market_amount&duration=realtime
     """
     if collected_at is None:
         kst_now = datetime.utcnow() + timedelta(hours=9)
@@ -84,7 +84,7 @@ def get_toss_amount_ranking(collected_at=None):
 
     max_retries = 3
     for attempt in range(1, max_retries + 1):
-        print(f"[거래대금] 연결 시도 {attempt}/{max_retries}: https://www.tossinvest.com/?market=kr&live-chart=biggest_total_amount&ranking-type=realtime_chart")
+        print(f"[거래대금] 연결 시도 {attempt}/{max_retries}: https://www.tossinvest.com/?market=kr&live-chart=biggest_market_amount&duration=realtime")
         
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -94,7 +94,7 @@ def get_toss_amount_ranking(collected_at=None):
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
 
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-        url = "https://www.tossinvest.com/?market=kr&live-chart=biggest_total_amount&ranking-type=realtime_chart"
+        url = "https://www.tossinvest.com/?market=kr&live-chart=biggest_market_amount&duration=realtime"
         
         all_data = []
         
