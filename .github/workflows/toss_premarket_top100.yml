@@ -35,11 +35,11 @@ jobs:
           python toss_crawling/toss_premarket_top100.py --session morning
 
   afternoon_session:
-    name: Afternoon Session (12:00 - 13:20)
+    name: Afternoon Session (12:00 - 15:20)
     needs: morning_session
     if: always() # 오전 세션 결과와 상관없이 실행
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 210
 
     steps:
       - uses: actions/checkout@v3
@@ -60,5 +60,5 @@ jobs:
           Secret_keys: ${{ secrets.Secret_keys }}
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)
-          # 13:20에 종료되도록 설정된 루프 실행
+          # 15:20에 종료되도록 설정된 루프 실행
           python toss_crawling/toss_premarket_top100.py --session afternoon

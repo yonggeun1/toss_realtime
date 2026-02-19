@@ -202,13 +202,13 @@ if __name__ == "__main__":
     is_afternoon = "--session afternoon" in sys.argv
 
     # 종료 시간 설정
-    # 기본은 13:20 종료
-    end_hour, end_minute = 13, 20
+    # 기본은 15:20 종료
+    end_hour, end_minute = 15, 20
     
     if is_morning:
         end_hour, end_minute = 12, 0
     elif is_afternoon:
-        end_hour, end_minute = 13, 20
+        end_hour, end_minute = 15, 20
     
     print(f"=== 토스증권 거래대금 상위 100 루프 시작 (세션: {'오전' if is_morning else '오후' if is_afternoon else '기본'}, 종료 예정: {end_hour:02d}:{end_minute:02d}) ===")
 
