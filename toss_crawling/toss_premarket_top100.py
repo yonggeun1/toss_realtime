@@ -225,7 +225,7 @@ if __name__ == "__main__":
             break
 
         start_time = time.time()
-        turn_timestamp = now.replace(microsecond=0).isoformat() + "+09:00"
+        turn_timestamp = now.replace(microsecond=0).isoformat()
         
         try:
             print(f"\n--- 수집 시작 시각: {turn_timestamp} ---")
