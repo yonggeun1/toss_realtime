@@ -314,10 +314,10 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
 
 if __name__ == "__main__":
     
-    # 인자 확인
+    # 인자 확인 (공백으로 분리된 인자들을 정확히 체크)
     run_once = "--once" in sys.argv
-    is_morning = "--session morning" in sys.argv
-    is_afternoon = "--session afternoon" in sys.argv
+    is_morning = "morning" in sys.argv
+    is_afternoon = "afternoon" in sys.argv
 
     # PDF 데이터 최초 1회 로드
     print("Loading ETF PDF data...")
@@ -328,18 +328,27 @@ if __name__ == "__main__":
         print("🧹 Cleaning up old data (older than today) before starting loop...")
         delete_old_scores()
 
+    # 초기 시간 및 종료 시간 설정
+    now = datetime.utcnow() + timedelta(hours=9)
+    end_hour, end_minute = 15, 20
+    
+    if is_morning:
+        end_hour, end_minute = 12, 0
+    elif is_afternoon:
+        end_hour, end_minute = 15, 20
+
+    print(f"🕒 현재 시각(KST): {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"=== 토스증권 수급 데이터 수집 시작 (세션: {'오전' if is_morning else '오후' if is_afternoon else '기본'}, 종료 예정: {end_hour:02d}:{end_minute:02d}) ===")
+
+    # 시작 전 이미 종료 시간이 지났는지 확인 (수동 실행 대응)
+    if not run_once and (now.hour > end_hour or (now.hour == end_hour and now.minute >= end_minute)):
+        print(f"⚠️ 현재 시간({now.strftime('%H:%M')})이 이미 종료 시간({end_hour:02d}:{end_minute:02d})을 지났습니다. 프로그램을 종료합니다.")
+        sys.exit(0)
+
     while True:
         # 🕒 서버 시간(UTC)에 9시간을 더해 한국 시간(KST) 구하기
         now = datetime.utcnow() + timedelta(hours=9)
         
-        # 종료 시간 설정
-        # 기본은 15:30 종료
-        end_hour, end_minute = 15, 30
-        
-        # 오전 세션인 경우 12:00 종료
-        if is_morning:
-            end_hour, end_minute = 12, 0
-            
         # 시작 시간 체크 (09:00 이전이면 대기)
         if not run_once and now.hour < 9:
             print(f"🕒 현재 시간(KST) {now.strftime('%H:%M:%S')} - 장 시작 전(09:00)입니다. 대기 중...")
