@@ -289,7 +289,7 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
 
                 if valid_data:
                     try:
-                        supabase.table("toss_realtime_top100").upsert(
+                        supabase.table("toss_yg_score_stk").upsert(
                             valid_data, on_conflict="investor, stock_code, ranking_type, collected_at"
                         ).execute()
                         print(f"🎉 [{ranking_type}] Supabase 저장 완료")

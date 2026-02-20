@@ -1,4 +1,4 @@
-﻿name: Toss Premarket Top 100 Crawler Sequential
+﻿name: Toss Realtime STK Crawler Sequential
 
 on:
   schedule:
@@ -32,7 +32,7 @@ jobs:
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)
           # 12:00에 종료되도록 설정된 루프 실행
-          python toss_crawling/toss_premarket_top100.py --session morning
+          python toss_crawling/toss_realtime_stk.py --session morning
 
   afternoon_session:
     name: Afternoon Session (12:00 - 15:20)
@@ -61,4 +61,4 @@ jobs:
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)
           # 15:20에 종료되도록 설정된 루프 실행
-          python toss_crawling/toss_premarket_top100.py --session afternoon
+          python toss_crawling/toss_realtime_stk.py --session afternoon

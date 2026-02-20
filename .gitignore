@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 
 GEMINI.md
+.gemini
 
 # Old legacy files
 old_toss_realtime_score.py
+backup/

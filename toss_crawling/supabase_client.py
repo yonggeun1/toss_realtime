@@ -31,7 +31,7 @@ def load_toss_data_from_supabase():
     """
     try:
         # 1. 가장 최근 수집된 날짜 확인
-        res = supabase.table("toss_realtime_top100") \
+        res = supabase.table("toss_yg_score_stk") \
             .select("collected_at") \
             .order("collected_at", desc=True) \
             .limit(1) \
@@ -59,7 +59,7 @@ def load_toss_data_from_supabase():
         print(f"⏳ 데이터 로드 중 (Range: {start_date} ~ {end_date})...", end='', flush=True)
 
         while True:
-            response = supabase.table("toss_realtime_top100") \
+            response = supabase.table("toss_yg_score_stk") \
                 .select("*") \
                 .gte("collected_at", start_date) \
                 .lt("collected_at", end_date) \
@@ -210,7 +210,7 @@ def load_etf_pdf_from_supabase():
 
 def save_score_to_supabase(df, target_time=None):
     """
-    계산된 YG Score 결과를 Supabase 'score' 테이블에 저장(Upsert)합니다.
+    계산된 YG Score 결과를 Supabase 'toss_yg_score_etf' 테이블에 저장(Upsert)합니다.
     target_time이 제공되면 해당 시간을 updated_at으로 사용하고, 없으면 현재 시간을 사용합니다.
     """
     try:
@@ -255,17 +255,17 @@ def save_score_to_supabase(df, target_time=None):
         for i in range(0, total_count, batch_size):
             batch = data_to_upsert[i:i+batch_size]
             # [수정] etf_code와 updated_at을 모두 기준으로 삼아 이력이 쌓이도록 함
-            res = supabase.table("score").upsert(batch, on_conflict="etf_code, updated_at").execute()
+            res = supabase.table("toss_yg_score_etf").upsert(batch, on_conflict="etf_code, updated_at").execute()
             print(f"   - {i} ~ {i+len(batch)}건 저장 완료")
             
-        print(f"✅ Supabase 'score' 테이블 전체 업데이트 완료: {total_count}건")
+        print(f"✅ Supabase 'toss_yg_score_etf' 테이블 전체 업데이트 완료: {total_count}건")
 
     except Exception as e:
         print(f"🚨 Supabase 저장 중 에러 발생: {e}")
 
 def delete_old_scores():
     """
-    score 및 toss_realtime_top100 테이블에서 오늘(KST 기준) 이전의 데이터를 모두 삭제합니다.
+    toss_yg_score_etf 및 toss_yg_score_skt 테이블에서 오늘(KST 기준) 이전의 데이터를 모두 삭제합니다.
     즉, 실행일 당일의 데이터만 남깁니다.
     """
     try:
@@ -278,16 +278,16 @@ def delete_old_scores():
         # [수정] KST ISO 포맷으로 저장하므로, threshold도 KST ISO 포맷으로 설정
         threshold_str = today_start_kst.isoformat()
 
-        # 삭제 쿼리 1: score 테이블 (updated_at < threshold)
-        response = supabase.table("score").delete().lt("updated_at", threshold_str).execute()
+        # 삭제 쿼리 1: toss_yg_score_etf 테이블 (updated_at < threshold)
+        response = supabase.table("toss_yg_score_etf").delete().lt("updated_at", threshold_str).execute()
         
         deleted_count = len(response.data) if response.data else 0
         if deleted_count > 0:
             print(f"🧹 지난 Score 데이터 삭제 완료: {deleted_count}건 (기준: {today_start_kst.strftime('%Y-%m-%d')} KST 이전)")
 
-        # 삭제 쿼리 2: toss_realtime_top100 테이블 (collected_at < threshold)
+        # 삭제 쿼리 2: toss_yg_score_stk 테이블 (collected_at < threshold)
         # collected_at이 KST Timestamp로 저장되므로 동일 기준 사용
-        response_top = supabase.table("toss_realtime_top100").delete().lt("collected_at", threshold_str).execute()
+        response_top = supabase.table("toss_yg_score_stk").delete().lt("collected_at", threshold_str).execute()
         
         deleted_count_top = len(response_top.data) if response_top.data else 0
         if deleted_count_top > 0:

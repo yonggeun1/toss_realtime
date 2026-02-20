@@ -32,6 +32,24 @@ except ImportError:
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     from supabase_client import supabase, delete_old_scores, load_etf_pdf_from_supabase
 
+def delete_old_premarket_data():
+    """
+    toss_realtime_stk 테이블에서 오늘(KST 기준) 이전의 데이터를 모두 삭제합니다.
+    """
+    try:
+        now_utc = datetime.utcnow()
+        now_kst = now_utc + timedelta(hours=9)
+        today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+        threshold_str = today_start_kst.isoformat()
+
+        print(f"🧹 [거래대금] 오늘({today_start_kst.strftime('%Y-%m-%d')}) 이전 데이터 삭제 중...")
+        response = supabase.table("toss_realtime_stk").delete().lt("collected_at", threshold_str).execute()
+        
+        # delete().execute()는 삭제된 행의 목록을 반환할 수 있음 (설정에 따라 다름)
+        print(f"✅ [거래대금] 지난 데이터 삭제 프로세스 완료 (기준: {threshold_str})")
+    except Exception as e:
+        print(f"🚨 [거래대금] 지난 데이터 삭제 오류: {e}")
+
 def parse_amount(amount_str):
     if not amount_str:
         return 0
@@ -176,7 +194,7 @@ def get_toss_amount_ranking(collected_at=None):
             if len(all_data) >= 80: # 최소 80개 이상 수집 시 성공으로 간주
                 try:
                     # 신규 데이터 저장 (삭제 로직 제거됨, 데이터 누적)
-                    supabase.table("toss_premarket_top100").upsert(
+                    supabase.table("toss_realtime_stk").upsert(
                         all_data, on_conflict="stock_code, collected_at"
                     ).execute()
                     print(f"🎉 [거래대금] Supabase 저장 완료 (데이터 누적)")
@@ -213,6 +231,9 @@ if __name__ == "__main__":
     now = datetime.utcnow() + timedelta(hours=9)
     print(f"🕒 현재 시각(KST): {now.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"=== 토스증권 거래대금 상위 100 루프 시작 (세션: {'오전' if is_morning else '오후' if is_afternoon else '기본'}, 종료 예정: {end_hour:02d}:{end_minute:02d}) ===")
+
+    # 시작 전 이전 날짜 데이터 삭제
+    delete_old_premarket_data()
 
     # 시작 전 이미 종료 시간이 지났는지 확인 (수동 실행 대응)
     if now.hour > end_hour or (now.hour == end_hour and now.minute >= end_minute):

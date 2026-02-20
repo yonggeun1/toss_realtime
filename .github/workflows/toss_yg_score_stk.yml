@@ -1,0 +1,61 @@
+name: Toss YG Score STK Sequential
+
+on:
+  workflow_dispatch: # 외부 트리거용 (수동 실행 포함)
+
+jobs:
+  morning_session:
+    name: Morning Session (09:00 - 12:00)
+    runs-on: ubuntu-latest
+    timeout-minutes: 181 # 09:00 ~ 12:01 (3시간)
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Crawler (Morning)
+        env:
+          Project_URL: ${{ secrets.Project_URL }}
+          Secret_keys: ${{ secrets.Secret_keys }}
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          # 12:00가 되면 스크립트 내부 로직에 의해 정상 종료됩니다.
+          python toss_crawling/toss_yg_score_stk.py --session morning
+
+  afternoon_session:
+    name: Afternoon Session (12:00 - 15:20)
+    needs: morning_session
+    if: always() # 오전 세션 결과와 상관없이 오후 세션 실행
+    runs-on: ubuntu-latest
+    timeout-minutes: 201
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Crawler (Afternoon)
+        env:
+          Project_URL: ${{ secrets.Project_URL }}
+          Secret_keys: ${{ secrets.Secret_keys }}
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          # 오후 세션은 15:20에 종료됩니다.
+          python toss_crawling/toss_yg_score_stk.py --session afternoon
