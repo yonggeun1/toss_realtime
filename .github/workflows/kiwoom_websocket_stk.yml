@@ -1,0 +1,67 @@
+name: Kiwoom WebSocket STK Sequential
+
+on:
+  workflow_dispatch: # 외부 트리거용 (수동 실행 및 API 호출 포함)
+
+jobs:
+  morning_session:
+    name: Morning Session (08:50 - 12:00)
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Kiwoom WebSocket Collector (Morning)
+        env:
+          Project_URL: ${{ secrets.Project_URL }}
+          Secret_keys: ${{ secrets.Secret_keys }}
+          API_KEY: ${{ secrets.API_KEY }}
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+          PYTHONIOENCODING: "utf-8"
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          # 12:00가 되면 스크립트 내부 로직에 의해 정상 종료됩니다.
+          python kiwoom/kiwoom_websocket.py morning
+
+  afternoon_session:
+    name: Afternoon Session (12:00 - 15:30)
+    needs: morning_session
+    if: always() # 오전 세션 결과와 상관없이 오후 세션 실행
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Kiwoom WebSocket Collector (Afternoon)
+        env:
+          Project_URL: ${{ secrets.Project_URL }}
+          Secret_keys: ${{ secrets.Secret_keys }}
+          API_KEY: ${{ secrets.API_KEY }}
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+          PYTHONIOENCODING: "utf-8"
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          # 오후 세션은 15:30에 종료됩니다.
+          python kiwoom/kiwoom_websocket.py afternoon

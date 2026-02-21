@@ -192,6 +192,18 @@ class WebSocketClient:
 
 # 10. 프로그램 실행하기
 async def main():
+    # 인자 확인 (GitHub Actions 세션 분할용)
+    is_morning = "morning" in sys.argv
+    is_afternoon = "afternoon" in sys.argv
+    
+    # 종료 시간 설정
+    if is_morning:
+        end_hour, end_minute = 12, 0
+        print("🕒 오전 세션 모드: 12:00에 종료됩니다.")
+    else:
+        end_hour, end_minute = 15, 30
+        print("🕒 일반/오후 세션 모드: 15:30에 종료됩니다.")
+
     # 10-1. Supabase에서 종목 코드 가져오기
     print("DB에서 종목 리스트를 조회 중입니다...")
     try:
@@ -225,9 +237,9 @@ async def main():
     try:
         while True:
             now = datetime.now()
-            # 장 마감 후 종료 (15:30)
-            if now.hour > 15 or (now.hour == 15 and now.minute > 30):
-                print("🏁 장 마감 시간이 되어 프로그램을 종료합니다.")
+            # 세션 종료 체크
+            if now.hour > end_hour or (now.hour == end_hour and now.minute >= end_minute):
+                print(f"🏁 세션 종료 시간({end_hour:02d}:{end_minute:02d})이 되어 프로그램을 종료합니다.")
                 break
             
             # 장 시작 전 대기 (08:55 이전)
