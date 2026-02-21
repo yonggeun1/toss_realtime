@@ -16,13 +16,15 @@ from toss_crawling.supabase_client import supabase
 from kiwoom_login_common import get_token, fn_call_mrkcond, DEFAULT_HOST
 
 def clean_value(val):
-    """키움 API 특유의 +, - 기호 및 콤마 제거 후 숫자로 변환"""
+    """키움 API 특유의 +, - 기호 및 콤마 제거 후 숫자로 변환. 마이너스 기호는 보존함."""
     if val is None or val == "":
         return 0
     try:
-        # 기호 및 숫자가 아닌 문자 제거
-        cleaned = re.sub(r'[^\d.]', '', str(val))
-        if not cleaned:
+        # 콤마 제거
+        val_str = str(val).replace(',', '')
+        # 숫자가 아닌 문자 제거하되, 마이너스 기호와 소수점은 유지
+        cleaned = re.sub(r'[^\d.\-]', '', val_str)
+        if not cleaned or cleaned == '-':
             return 0
         return float(cleaned)
     except:
@@ -92,26 +94,31 @@ def main():
                 if not re.match(r'^\d{6}$', code): continue
 
                 res = fn_ka10006(token, {'stk_cd': code})
-                if res and res.get('return_code') == 5:
+                # 1700 에러(return_code 5) 발생 시 성공할 때까지 1초 간격으로 재시도
+                while res and res.get('return_code') == 5:
+                    print(f"🚨 1700 에러 발생({name}). 1초 대기 후 재시도...")
                     time.sleep(1.0)
                     res = fn_ka10006(token, {'stk_cd': code})
 
                 if res and res.get('return_code') == 0:
+                    # 가격 필드는 절대값으로, 등락율/대비는 부호 유지
                     record = {
                         "stk_cd": code, "stk_nm": name, "date": res.get("date"),
-                        "close_pric": clean_value(res.get("close_pric")),
+                        "close_pric": abs(clean_value(res.get("close_pric"))),
                         "pre": clean_value(res.get("pre")),
                         "flu_rt": clean_value(res.get("flu_rt")),
-                        "open_pric": clean_value(res.get("open_pric")),
-                        "high_pric": clean_value(res.get("high_pric")),
-                        "low_pric": clean_value(res.get("low_pric")),
-                        "trde_qty": int(clean_value(res.get("trde_qty"))),
-                        "trde_prica": int(clean_value(res.get("trde_prica"))),
+                        "open_pric": abs(clean_value(res.get("open_pric"))),
+                        "high_pric": abs(clean_value(res.get("high_pric"))),
+                        "low_pric": abs(clean_value(res.get("low_pric"))),
+                        "trde_qty": int(abs(clean_value(res.get("trde_qty")))),
+                        "trde_prica": int(abs(clean_value(res.get("trde_prica")))),
                         "cntr_str": clean_value(res.get("cntr_str")),
                         "collected_at": datetime.now().astimezone().isoformat()
                     }
                     collected_data.append(record)
-                time.sleep(0.4)
+                
+                # 기본 간격 0.2초
+                time.sleep(0.2)
 
             # 데이터 적재 및 계산 RPC 호출
             if collected_data:
