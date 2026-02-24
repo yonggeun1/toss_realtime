@@ -63,9 +63,9 @@ def main():
             print(f"🏁 세션 종료 시간({end_hour:02d}:{end_minute:02d})이 되어 프로그램을 종료합니다.")
             break
 
-        # 2. 장 시작 전 대기 (08:55 이전 실행 시)
-        if current_time < "0855":
-            print(f"💤 장 시작 전입니다. 08:55까지 대기합니다... (현재: {now.strftime('%H:%M:%S')})", end="\r")
+        # 2. 장 시작 전 대기 (08:50 이전 실행 시)
+        if current_time < "0850":
+            print(f"💤 장 시작 전입니다. 08:50까지 대기합니다... (현재: {now.strftime('%H:%M:%S')})", end="\r")
             time.sleep(30)
             continue
 
@@ -97,7 +97,7 @@ def main():
                 # 1700 에러(return_code 5) 발생 시 성공할 때까지 1초 간격으로 재시도
                 while res and res.get('return_code') == 5:
                     print(f"🚨 1700 에러 발생({name}). 1초 대기 후 재시도...")
-                    time.sleep(1.0)
+                    time.sleep(2.0)
                     res = fn_ka10006(token, {'stk_cd': code})
 
                 if res and res.get('return_code') == 0:
@@ -117,8 +117,8 @@ def main():
                     }
                     collected_data.append(record)
                 
-                # 기본 간격 0.2초
-                time.sleep(0.2)
+                # 기본 간격 0.7초
+                time.sleep(0.7)
 
             # 데이터 적재 및 계산 RPC 호출
             if collected_data:

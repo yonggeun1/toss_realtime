@@ -34,7 +34,7 @@ except ImportError:
 
 def delete_old_premarket_data():
     """
-    toss_realtime_stk 테이블에서 오늘(KST 기준) 이전의 데이터를 모두 삭제합니다.
+    toss_realtime_stk 및 toss_realtime_etf_history 테이블에서 오늘(KST 기준) 이전의 데이터를 모두 삭제합니다.
     """
     try:
         now_utc = datetime.utcnow()
@@ -42,13 +42,17 @@ def delete_old_premarket_data():
         today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
         threshold_str = today_start_kst.isoformat()
 
-        print(f"🧹 [거래대금] 오늘({today_start_kst.strftime('%Y-%m-%d')}) 이전 데이터 삭제 중...")
-        response = supabase.table("toss_realtime_stk").delete().lt("collected_at", threshold_str).execute()
+        print(f"🧹 [거래대금/히스토리] 오늘({today_start_kst.strftime('%Y-%m-%d')}) 이전 데이터 삭제 중...")
         
-        # delete().execute()는 삭제된 행의 목록을 반환할 수 있음 (설정에 따라 다름)
-        print(f"✅ [거래대금] 지난 데이터 삭제 프로세스 완료 (기준: {threshold_str})")
+        # 원천 데이터 삭제
+        supabase.table("toss_realtime_stk").delete().lt("collected_at", threshold_str).execute()
+        
+        # ETF 히스토리 데이터 삭제
+        supabase.table("toss_realtime_etf_history").delete().lt("collected_at", threshold_str).execute()
+        
+        print(f"✅ [거래대금/히스토리] 지난 데이터 삭제 프로세스 완료 (기준: {threshold_str})")
     except Exception as e:
-        print(f"🚨 [거래대금] 지난 데이터 삭제 오류: {e}")
+        print(f"🚨 [거래대금/히스토리] 지난 데이터 삭제 오류: {e}")
 
 def parse_amount(amount_str):
     if not amount_str:
