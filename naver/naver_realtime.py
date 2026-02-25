@@ -205,8 +205,8 @@ def main():
         if stop_requested:
             break
         
-        print("🔄 수집 완료. 즉시 다음 수집을 시작합니다...")
-        time.sleep(1) # 아주 짧은 대기 후 바로 재시작
+        print("🔄 수집 완료. 5초 후 다음 수집을 시작합니다...")
+        time.sleep(5) # 5초 대기 후 재시작
 
     print("=== 모든 프로세스 종료 ===")
     sys.exit(0)
