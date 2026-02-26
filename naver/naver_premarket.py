@@ -111,16 +111,18 @@ def get_naver_sise(url, market_name, type_name, now_kst):
         return []
 
 def main():
+    # 시작 전 이전 날짜 데이터 삭제 (1회성 실행이므로 즉시 삭제)
+    delete_old_premarket_data()
+
     now = datetime.utcnow() + timedelta(hours=9)
     current_time_str = now.strftime("%H%M")
     target_time = "0851"
 
     print(f"=== 네이버 프리마켓(Nextrade) 최종 집계 시작 (현재: {now.strftime('%H:%M:%S')}) ===")
 
-    # 08:51분 이전이라면 대기 (선택 사항)
+    # 08:51분 이전이라면 대기
     if current_time_str < target_time:
-        print(f"🕒 아직 {target_time[:2]}:{target_time[2:]} 전입니다. 대기 후 실행하거나 예약 실행을 권장합니다.")
-        # 사용자가 수동 실행했을 때를 위해 잠시 대기 로직 유지 (원치 않으면 바로 종료 가능)
+        print(f"🕒 아직 {target_time[:2]}:{target_time[2:]} 전입니다. {target_time}까지 대기합니다.")
         while True:
             now = datetime.utcnow() + timedelta(hours=9)
             current_time_str = now.strftime("%H%M")
@@ -130,8 +132,7 @@ def main():
             time.sleep(30)
         print("\n🚀 지정된 시간이 되어 수집을 시작합니다.")
 
-    # 1회성 작업 시작
-    delete_old_premarket_data()
+    # 수집 시점 타임스탬프 고정
     turn_timestamp = now.replace(microsecond=0).isoformat()
     
     urls = [
