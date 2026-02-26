@@ -1,0 +1,32 @@
+name: Naver Premarket STK Crawler (Manual)
+
+on:
+  workflow_dispatch: # 수동 실행 전용
+
+jobs:
+  run_premarket:
+    name: Run Premarket Session (Manual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Naver Premarket Crawler (Once)
+        env:
+          Project_URL: ${{ secrets.Project_URL }}
+          Secret_keys: ${{ secrets.Secret_keys }}
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          # 08:51분 집계 1회 실행
+          python naver/naver_premarket.py

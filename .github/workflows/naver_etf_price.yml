@@ -1,16 +1,13 @@
-﻿name: Toss Realtime STK Crawler Sequential
+﻿name: Naver ETF Price Crawler Sequential
 
 on:
-  # schedule:
-  #   # 매일 평일(월~금) 한국 시간 08:55 (UTC 23:55) 실행
-  #   - cron: "55 23 * * 0-4"
-  workflow_dispatch: # 수동 실행 가능
+  workflow_dispatch: # 수동 실행만 가능
 
 jobs:
   morning_session:
-    name: Morning Session (08:55 - 12:00)
+    name: Morning Session (08:50 - 12:00)
     runs-on: ubuntu-latest
-    timeout-minutes: 190
+    timeout-minutes: 200
 
     steps:
       - uses: actions/checkout@v3
@@ -25,14 +22,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Premarket Crawler (Morning)
+      - name: Run Naver ETF Price Crawler (Morning)
         env:
           Project_URL: ${{ secrets.Project_URL }}
           Secret_keys: ${{ secrets.Secret_keys }}
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)
-          # 12:00에 종료되도록 설정된 루프 실행
-          python toss_crawling/toss_realtime_stk.py --session morning
+          python naver/naver_etf_price.py morning
 
   afternoon_session:
     name: Afternoon Session (12:00 - 15:20)
@@ -54,11 +50,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Premarket Crawler (Afternoon)
+      - name: Run Naver ETF Price Crawler (Afternoon)
         env:
           Project_URL: ${{ secrets.Project_URL }}
           Secret_keys: ${{ secrets.Secret_keys }}
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)
-          # 15:20에 종료되도록 설정된 루프 실행
-          python toss_crawling/toss_realtime_stk.py --session afternoon
+          python naver/naver_etf_price.py afternoon
