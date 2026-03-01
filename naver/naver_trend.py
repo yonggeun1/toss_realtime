@@ -7,18 +7,6 @@ import signal
 from datetime import datetime, timedelta, timezone
 from bs4 import BeautifulSoup
 
-# 전역 변수로 종료 요청 상태 관리
-stop_requested = False
-
-def signal_handler(sig, frame):
-    global stop_requested
-    print(f"\n🛑 종료 신호({sig})를 수신했습니다. 현재 진행 중인 작업을 마치고 안전하게 종료합니다...")
-    stop_requested = True
-
-# 종료 신호(Ctrl+C 등) 연결
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
 # Supabase 연동
 try:
     from toss_crawling.supabase_client import supabase
@@ -110,80 +98,41 @@ def get_market_trend(market_code):
         return None
 
 def main():
-    # 인자 확인 (세션 구분)
-    is_morning = "morning" in sys.argv
-    is_afternoon = "afternoon" in sys.argv
+    # 1. 이전 날짜 데이터 삭제 (오전 실행 시 권장)
+    delete_old_trend_data()
 
-    # 오전 세션이거나 일반 실행일 때만 삭제 수행
-    if not is_afternoon:
-        delete_old_trend_data()
+    # 2. 수집 대상 시간 확인
+    now_kst = get_korea_now()
+    today_date, target_time = get_nearest_target_time()
 
-    # 루프 종료 시간 설정
-    end_hour, end_minute = 15, 40
-    if is_morning:
-        end_hour, end_minute = 12, 0
-    elif is_afternoon:
-        end_hour, end_minute = 15, 40
+    if target_time is None:
+        print(f"🕒 현재 시각(KST) {now_kst.strftime('%H:%M:%S')} - 첫 번째 타겟 시간({TARGET_TIMES[0]}) 전입니다. 종료합니다.")
+        return
 
-    print(f"🚀 시장 매매동향 수집 시작 (세션: {'오전' if is_morning else '오후' if is_afternoon else '기본'}, 종료 예정: {end_hour:02d}:{end_minute:02d})")
+    # 3. 이미 수집했는지 확인
+    if is_already_recorded_in_supabase(today_date, target_time):
+        print(f"✅ {today_date} {target_time} 스냅샷이 이미 존재합니다. 작업을 종료합니다.")
+        return
 
-    while True:
-        if stop_requested:
-            break
-
-        now_kst = get_korea_now()
-        today_date, target_time = get_nearest_target_time()
-        current_hm = now_kst.strftime('%H%M')
-
-        # 1. 루프 종료 시간 체크
-        if current_hm > f"{end_hour:02d}{end_minute:02d}":
-            print(f"\n🕒 현재 시각(KST) {now_kst.strftime('%H:%M:%S')} - 종료 시간({end_hour:02d}:{end_minute:02d})이 되어 종료합니다.")
-            break
-
-        # 2. 장 운영 시작 시간 체크 (08:50 이전 대기)
-        if current_hm < "0850":
-            print(f"🕒 장 시작 전({now_kst.strftime('%H:%M:%S')}). 대기 중...", end='\r')
-            time.sleep(60)
-            continue
-
-        # 3. 타겟 시간 도달 여부 확인
-        if target_time is None:
-            print(f"🕒 첫 번째 타겟 시간({TARGET_TIMES[0]}) 대기 중 (현재: {now_kst.strftime('%H:%M:%S')})...", end='\r')
-            time.sleep(30)
-            continue
-
-        # 4. 이미 수집했는지 확인
-        if is_already_recorded_in_supabase(today_date, target_time):
-            print(f"✅ {today_date} {target_time} 스냅샷 완료. 다음 시간 대기 중 ({now_kst.strftime('%H:%M:%S')})...", end='\r')
-            time.sleep(30)
-            continue
-
-        # 5. 데이터 수집 및 저장
-        print(f"\n📸 [{now_kst.strftime('%H:%M:%S')}] {target_time} 스냅샷 수집 및 수파베이스 저장 시작!")
-        insert_data = []
-        for m in ['KOSPI', 'KOSDAQ']:
-            if stop_requested: break
-            t_data = get_market_trend(m)
-            if t_data:
-                # CSV 컬럼명과 동일한 한글 키로 데이터 추가
-                t_data['거래일'] = today_date
-                t_data['거래시간'] = target_time
-                t_data['수집시간'] = now_kst.isoformat()
-                insert_data.append(t_data)
-        
-        if stop_requested: break
-
-        if insert_data:
-            try:
-                # Upsert를 사용하여 중복 방지 및 갱신 가능하도록 저장
-                supabase.table("naver_market_trend").upsert(insert_data).execute()
-                print(f"💾 {target_time} 수파베이스 저장 성공 ({len(insert_data)}건)")
-            except Exception as e:
-                print(f"❌ 수파베이스 저장 오류: {e}")
-        
-        time.sleep(30) # 수집 직후 잠시 휴식
-
-    print("=== 모든 프로세스 종료 ===")
+    # 4. 데이터 수집 및 저장
+    print(f"📸 [{now_kst.strftime('%H:%M:%S')}] {target_time} 스냅샷 수집 및 수파베이스 저장 시작!")
+    insert_data = []
+    for m in ['KOSPI', 'KOSDAQ']:
+        t_data = get_market_trend(m)
+        if t_data:
+            t_data['거래일'] = today_date
+            t_data['거래시간'] = target_time
+            t_data['수집시간'] = now_kst.isoformat()
+            insert_data.append(t_data)
+    
+    if insert_data:
+        try:
+            supabase.table("naver_market_trend").upsert(insert_data).execute()
+            print(f"💾 {target_time} 수파베이스 저장 성공 ({len(insert_data)}건)")
+        except Exception as e:
+            print(f"❌ 수파베이스 저장 오류: {e}")
+    
+    print("=== 수집 완료 및 프로세스 종료 ===")
 
 if __name__ == "__main__":
     main()
