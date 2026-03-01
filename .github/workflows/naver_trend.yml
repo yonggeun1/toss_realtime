@@ -1,0 +1,37 @@
+name: Naver Market Trend Snapshot
+
+on:
+  workflow_dispatch:
+  # 필요 시 주석을 해제하여 스케줄을 활성화할 수 있습니다.
+  # schedule:
+  #   - cron: "30 0 * * 1-5" # 09:30 KST
+  #   - cron: "0 1 * * 1-5"  # 10:00 KST
+  #   - cron: "30 2 * * 1-5" # 11:30 KST
+  #   - cron: "20 4 * * 1-5" # 13:20 KST
+  #   - cron: "30 5 * * 1-5" # 14:30 KST
+  #   - cron: "30 6 * * 1-5" # 15:30 KST
+
+jobs:
+  run-market-trend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Market Trend Script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python naver/naver_trend.py
