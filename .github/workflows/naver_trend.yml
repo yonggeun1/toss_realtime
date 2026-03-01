@@ -32,6 +32,8 @@ jobs:
 
       - name: Run Market Trend Script
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python naver/naver_trend.py
+          Project_URL: ${{ secrets.Project_URL }}
+          Secret_keys: ${{ secrets.Secret_keys }}
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          python naver/naver_trend.py
