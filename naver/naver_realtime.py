@@ -205,8 +205,22 @@ def main():
         if stop_requested:
             break
         
-        print("🔄 수집 완료. 5초 후 다음 수집을 시작합니다...")
-        time.sleep(5) # 5초 대기 후 재시작
+        # [수정] 시간대별 대기 시간 설정 (09~10시: 1분, 10시 이후: 5분)
+        now_after = datetime.utcnow() + timedelta(hours=9)
+        current_time_val = now_after.hour * 100 + now_after.minute
+        
+        if current_time_val < 1000:  # 10시 이전 (08:50 ~ 09:59)
+            wait_seconds = 60
+        else:  # 10시 이후 (10:00 ~ 15:20)
+            wait_seconds = 300
+            
+        print(f"🔄 수집 완료. {wait_seconds // 60}분 대기 후 다음 수집을 시작합니다... (현재 시각: {now_after.strftime('%H:%M:%S')})")
+        
+        # 중단 요청 확인하며 대기 (반응성 확보)
+        for _ in range(wait_seconds):
+            if stop_requested:
+                break
+            time.sleep(1)
 
     print("=== 모든 프로세스 종료 ===")
     sys.exit(0)

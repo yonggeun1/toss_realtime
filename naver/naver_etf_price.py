@@ -2,7 +2,20 @@ import requests
 import sys
 import os
 import time
+import signal
 from datetime import datetime, timedelta
+
+# 전역 변수로 종료 요청 상태 관리
+stop_requested = False
+
+def signal_handler(sig, frame):
+    global stop_requested
+    print(f"\n🛑 종료 신호({sig})를 수신했습니다. 현재 진행 중인 수집 및 저장을 마치고 안전하게 종료합니다...")
+    stop_requested = True
+
+# 종료 신호(Ctrl+C 등) 연결
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Supabase 연동
 try:
@@ -151,8 +164,25 @@ def main():
             print(f"❌ 루프 실행 중 오류 발생: {e}")
             time.sleep(10) # 오류 발생 시 잠시 대기
 
-        print("🔄 30초 후 다음 수집을 시작합니다...")
-        time.sleep(30)
+        if stop_requested:
+            break
+        
+        # [수정] 시간대별 대기 시간 설정 (09~10시: 1분, 10시 이후: 5분)
+        now_after = datetime.utcnow() + timedelta(hours=9)
+        current_time_val = now_after.hour * 100 + now_after.minute
+        
+        if current_time_val < 1000:  # 10시 이전 (08:50 ~ 09:59)
+            wait_seconds = 60
+        else:  # 10시 이후 (10:00 ~ 15:20)
+            wait_seconds = 300
+            
+        print(f"🔄 수집 완료. {wait_seconds // 60}분 대기 후 다음 수집을 시작합니다... (현재 시각: {now_after.strftime('%H:%M:%S')})")
+        
+        # 중단 요청 확인하며 대기 (반응성 확보)
+        for _ in range(wait_seconds):
+            if stop_requested:
+                break
+            time.sleep(1)
 
     print("=== 모든 프로세스 종료 ===")
 
