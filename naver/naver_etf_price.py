@@ -19,12 +19,12 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 # Supabase 연동
 try:
-    from toss_crawling.supabase_client import supabase
+    from toss_crawling.supabase_client import supabase, get_kst_now
 except ImportError:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if project_root not in sys.path:
         sys.path.append(project_root)
-    from toss_crawling.supabase_client import supabase
+    from toss_crawling.supabase_client import supabase, get_kst_now
 
 def get_naver_etf_info():
     """
@@ -47,7 +47,7 @@ def get_naver_etf_info():
             print("❌ API 응답에 ETF 데이터가 없습니다.")
             return []
 
-        now_kst = (datetime.utcnow() + timedelta(hours=9)).isoformat()
+        now_kst = get_kst_now().isoformat()
         collected_data = []
         
         for item in etf_list:
@@ -82,8 +82,7 @@ def delete_old_etf_price_data():
     오늘(KST 기준) 이전의 ETF 시세 히스토리 데이터를 삭제합니다.
     """
     try:
-        now_utc = datetime.utcnow()
-        now_kst = now_utc + timedelta(hours=9)
+        now_kst = get_kst_now()
         today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
         threshold_str = today_start_kst.isoformat()
 
@@ -115,7 +114,7 @@ def main():
 
     while True:
         try:
-            now = datetime.utcnow() + timedelta(hours=9)
+            now = get_kst_now()
             current_time_str = now.strftime("%H%M")
             
             # 시작 시간 체크
@@ -168,7 +167,7 @@ def main():
             break
         
         # [수정] 시간대별 대기 시간 설정 (09~10시: 1분, 10시 이후: 5분)
-        now_after = datetime.utcnow() + timedelta(hours=9)
+        now_after = get_kst_now()
         current_time_val = now_after.hour * 100 + now_after.minute
         
         if current_time_val < 1000:  # 10시 이전 (08:50 ~ 09:59)

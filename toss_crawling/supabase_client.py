@@ -22,7 +22,11 @@ except Exception as e:
 
 
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+def get_kst_now():
+    """현재 한국 표준시(KST, UTC+9)를 타임존 정보와 함께 반환합니다."""
+    return datetime.now(timezone(timedelta(hours=9)))
 
 def load_toss_data_from_supabase():
     """
@@ -46,7 +50,7 @@ def load_toss_data_from_supabase():
         target_date = latest_timestamp.replace('T', ' ').split(' ')[0]
         print(f"📅 가장 최근 데이터 날짜: {target_date} (데이터 로드 중...)")
 
-        # 해당 날짜의 데이터 범위 설정 (UTC 기준일 수 있으므로 하루를 포함)
+        # 해당 날짜의 데이터 범위 설정 (KST 기준)
         start_date = target_date
         end_date_dt = datetime.strptime(target_date, "%Y-%m-%d") + timedelta(days=1)
         end_date = end_date_dt.strftime("%Y-%m-%d")
@@ -118,31 +122,11 @@ def load_toss_data_from_supabase():
         print(f"🚨 Supabase 데이터 로드 중 에러 발생: {e}")
         return None, None
 
-    except Exception as e:
-        print(f"🚨 Supabase 데이터 로드 중 에러 발생: {e}")
-        return None
-
 def load_etf_pdf_from_supabase():
     """
     Supabase의 etf_pdf 테이블에서 데이터를 로드하여 DataFrame으로 반환합니다.
-    로컬에 etf_pdf_snapshot.csv 파일이 있으면 우선적으로 읽어옵니다.
     """
     try:
-        # 0. 로컬 CSV 스냅샷 확인 (사용 안 함)
-        # csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'etf_pdf_snapshot.csv')
-        # if os.path.exists(csv_path):
-        #     try:
-        #         df_pdf = pd.read_csv(csv_path)
-        #         # 종목코드 포맷팅 (6자리 문자열)
-        #         if 'ETF종목코드' in df_pdf.columns:
-        #             df_pdf['ETF종목코드'] = df_pdf['ETF종목코드'].astype(str).str.zfill(6)
-        #         if '구성종목코드' in df_pdf.columns:
-        #             df_pdf['구성종목코드'] = df_pdf['구성종목코드'].astype(str).str.zfill(6)
-        #         print(f"✅ 로컬 CSV 스냅샷에서 ETF PDF 로드 완료: {len(df_pdf)}건")
-        #         return df_pdf
-        #     except Exception as e:
-        #         print(f"⚠️ 로컬 CSV 로드 실패 ({e}), Supabase에서 직접 로드합니다.")
-
         all_data = []
         limit = 1000
         offset = 0
@@ -150,7 +134,6 @@ def load_etf_pdf_from_supabase():
         print("⏳ Supabase ETF PDF 데이터 로드 중...", end='', flush=True)
         
         while True:
-            # 페이지네이션: offset부터 limit만큼 가져오기
             response = supabase.table("ETF_PDF").select("*").range(offset, offset + limit - 1).execute()
             
             if not response.data:
@@ -158,7 +141,6 @@ def load_etf_pdf_from_supabase():
                 
             all_data.extend(response.data)
             
-            # 가져온 데이터가 limit보다 적으면 더 이상 데이터가 없다는 뜻
             if len(response.data) < limit:
                 break
             
@@ -173,7 +155,6 @@ def load_etf_pdf_from_supabase():
 
         df_pdf = pd.DataFrame(all_data)
         
-        # 컬럼명 통일 (DB 컬럼명 -> 로직용 컬럼명)
         column_mapping = {
             'etf_code': 'ETF종목코드',
             'etf_name': 'ETF종목명',
@@ -182,21 +163,15 @@ def load_etf_pdf_from_supabase():
             'holdings_weight': '구성비중(%)'
         }
         
-        # 존재하는 컬럼만 변경
         existing_mapping = {k: v for k, v in column_mapping.items() if k in df_pdf.columns}
         if existing_mapping:
             df_pdf.rename(columns=existing_mapping, inplace=True)
 
-        # 추가적인 컬럼명 호환 처리 (시가총액기준구성비율 등)
         if '시가총액기준구성비율' in df_pdf.columns:
             df_pdf.rename(columns={'시가총액기준구성비율': '구성비중(%)'}, inplace=True)
         
-        if '구성비중(%)' not in df_pdf.columns:
-            print(f"⚠️ '구성비중(%)' 컬럼을 찾을 수 없습니다. (컬럼: {list(df_pdf.columns)})")
-
         df_pdf['구성비중(%)'] = pd.to_numeric(df_pdf['구성비중(%)'], errors='coerce').fillna(0)
         
-        # 종목코드 포맷팅 (6자리 문자열)
         if 'ETF종목코드' in df_pdf.columns:
             df_pdf['ETF종목코드'] = df_pdf['ETF종목코드'].astype(str).str.zfill(6)
         if '구성종목코드' in df_pdf.columns:
@@ -211,14 +186,13 @@ def load_etf_pdf_from_supabase():
 def save_score_to_supabase(df, target_time=None):
     """
     계산된 YG Score 결과를 Supabase 'toss_yg_score_etf' 테이블에 저장(Upsert)합니다.
-    target_time이 제공되면 해당 시간을 updated_at으로 사용하고, 없으면 현재 시간을 사용합니다.
+    target_time이 제공되면 해당 시간을 updated_at으로 사용하고, 없으면 현재 KST 시간을 사용합니다.
     """
     try:
         if df is None or df.empty:
             print("⚠️ 저장할 데이터가 없습니다.")
             return
 
-        # 1. 저장할 데이터 준비 (컬럼 매핑)
         df_new = df.copy()
         df_new.rename(columns={
             'ETF종목코드': 'etf_code',
@@ -229,24 +203,17 @@ def save_score_to_supabase(df, target_time=None):
             '종목수': 'holdings_count'
         }, inplace=True)
         
-        # 2. 업로드할 데이터 구성
-        # target_time이 있으면 사용, 없으면 현재 KST 시간 생성
+        # updated_at 설정 (타임존 정보 포함)
         if target_time:
             current_time = target_time
         else:
-            kst_now = datetime.utcnow() + timedelta(hours=9)
-            current_time = kst_now.isoformat()
+            current_time = get_kst_now().isoformat()
         
         upsert_cols = ['etf_code', 'etf_name', 'total_score', 'foreign_score', 'institution_score', 'holdings_count', 'updated_at']
-        
-        # updated_at 추가
         df_new['updated_at'] = current_time
         
-        # 필요한 컬럼만 선택하여 dict 리스트로 변환
         data_to_upsert = df_new[upsert_cols].to_dict(orient='records')
 
-        # 3. 데이터 저장 (전체 Upsert)
-        # 데이터가 많을 경우 Supabase 요청 제한에 걸릴 수 있으므로 1000개씩 분할 처리
         batch_size = 1000
         total_count = len(data_to_upsert)
         
@@ -254,7 +221,6 @@ def save_score_to_supabase(df, target_time=None):
         
         for i in range(0, total_count, batch_size):
             batch = data_to_upsert[i:i+batch_size]
-            # [수정] etf_code와 updated_at을 모두 기준으로 삼아 이력이 쌓이도록 함
             res = supabase.table("toss_yg_score_etf").upsert(batch, on_conflict="etf_code, updated_at").execute()
             print(f"   - {i} ~ {i+len(batch)}건 저장 완료")
             
@@ -266,27 +232,20 @@ def save_score_to_supabase(df, target_time=None):
 def delete_old_scores():
     """
     toss_yg_score_etf 및 toss_yg_score_skt 테이블에서 오늘(KST 기준) 이전의 데이터를 모두 삭제합니다.
-    즉, 실행일 당일의 데이터만 남깁니다.
     """
     try:
-        # KST 기준 오늘 시작 시간 계산
-        now_utc = datetime.utcnow()
-        now_kst = now_utc + timedelta(hours=9)
+        now_kst = get_kst_now()
         today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        # 비교를 위해 UTC로 변환 (updated_at은 UTC로 저장됨)
-        # [수정] KST ISO 포맷으로 저장하므로, threshold도 KST ISO 포맷으로 설정
         threshold_str = today_start_kst.isoformat()
 
-        # 삭제 쿼리 1: toss_yg_score_etf 테이블 (updated_at < threshold)
+        # 삭제 쿼리 1: toss_yg_score_etf 테이블
         response = supabase.table("toss_yg_score_etf").delete().lt("updated_at", threshold_str).execute()
         
         deleted_count = len(response.data) if response.data else 0
         if deleted_count > 0:
             print(f"🧹 지난 Score 데이터 삭제 완료: {deleted_count}건 (기준: {today_start_kst.strftime('%Y-%m-%d')} KST 이전)")
 
-        # 삭제 쿼리 2: toss_yg_score_stk 테이블 (collected_at < threshold)
-        # collected_at이 KST Timestamp로 저장되므로 동일 기준 사용
+        # 삭제 쿼리 2: toss_yg_score_stk 테이블
         response_top = supabase.table("toss_yg_score_stk").delete().lt("collected_at", threshold_str).execute()
         
         deleted_count_top = len(response_top.data) if response_top.data else 0
@@ -295,3 +254,4 @@ def delete_old_scores():
             
     except Exception as e:
         print(f"🚨 지난 데이터 삭제 오류: {e}")
+

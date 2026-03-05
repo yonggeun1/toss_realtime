@@ -25,12 +25,12 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 # Supabase 클라이언트 임포트
 try:
-    from toss_crawling.supabase_client import supabase, delete_old_scores, load_etf_pdf_from_supabase
+    from toss_crawling.supabase_client import supabase, delete_old_scores, load_etf_pdf_from_supabase, get_kst_now
 except ImportError:
     # 로컬 실행 시 경로 문제 대비
     import os
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from supabase_client import supabase, delete_old_scores, load_etf_pdf_from_supabase
+    from supabase_client import supabase, delete_old_scores, load_etf_pdf_from_supabase, get_kst_now
 
 def parse_amount(amount_str):
     if not amount_str:
@@ -78,7 +78,7 @@ def parse_date(date_str):
     토스증권 날짜 형식(오늘, 어제, 1월 30일 등)을 YYYY-MM-DD 형식으로 변환
     """
     # KST 기준 시간 사용
-    kst_now = datetime.utcnow() + timedelta(hours=9)
+    kst_now = get_kst_now()
     today_str = kst_now.strftime('%Y-%m-%d')
     current_year = kst_now.year
     
@@ -110,7 +110,7 @@ def get_toss_ranking(ranking_type="buy", collected_at=None):
     ranking_name = "순매수" if ranking_type == "buy" else "순매도"
     
     if collected_at is None:
-        kst_now = datetime.utcnow() + timedelta(hours=9)
+        kst_now = get_kst_now()
         collected_at = kst_now.isoformat()
     
     # 🕒 [추가] 09:00 ~ 10:00 장 초반 보호 로직 여부 판단
@@ -329,7 +329,7 @@ if __name__ == "__main__":
         delete_old_scores()
 
     # 초기 시간 및 종료 시간 설정
-    now = datetime.utcnow() + timedelta(hours=9)
+    now = get_kst_now()
     end_hour, end_minute = 15, 20
     
     if is_morning:
@@ -347,7 +347,7 @@ if __name__ == "__main__":
 
     while True:
         # 🕒 서버 시간(UTC)에 9시간을 더해 한국 시간(KST) 구하기
-        now = datetime.utcnow() + timedelta(hours=9)
+        now = get_kst_now()
         
         # 시작 시간 체크 (09:00 이전이면 대기)
         if not run_once and now.hour < 9:
@@ -388,7 +388,7 @@ if __name__ == "__main__":
             break
 
         # [수정] 세션 종료 조건 또는 외부 종료 요청 체크
-        now_check = datetime.utcnow() + timedelta(hours=9)
+        now_check = get_kst_now()
         if stop_requested:
             print("🛑 외부 요청에 의해 안전하게 프로세스를 종료합니다.")
             break

@@ -8,20 +8,19 @@ from datetime import datetime, timedelta
 
 # Supabase 연동
 try:
-    from toss_crawling.supabase_client import supabase
+    from toss_crawling.supabase_client import supabase, get_kst_now
 except ImportError:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if project_root not in sys.path:
         sys.path.append(project_root)
-    from toss_crawling.supabase_client import supabase
+    from toss_crawling.supabase_client import supabase, get_kst_now
 
 def delete_old_premarket_data():
     """
     오늘(KST 기준) 이전의 프리마켓 관련 데이터를 모두 삭제합니다.
     """
     try:
-        now_utc = datetime.utcnow()
-        now_kst = now_utc + timedelta(hours=9)
+        now_kst = get_kst_now()
         today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
         threshold_str = today_start_kst.isoformat()
 
@@ -114,7 +113,7 @@ def main():
     # 시작 전 이전 날짜 데이터 삭제 (1회성 실행이므로 즉시 삭제)
     delete_old_premarket_data()
 
-    now = datetime.utcnow() + timedelta(hours=9)
+    now = get_kst_now()
     current_time_str = now.strftime("%H%M")
     target_time = "0851"
 
@@ -124,7 +123,7 @@ def main():
     if current_time_str < target_time:
         print(f"🕒 아직 {target_time[:2]}:{target_time[2:]} 전입니다. {target_time}까지 대기합니다.")
         while True:
-            now = datetime.utcnow() + timedelta(hours=9)
+            now = get_kst_now()
             current_time_str = now.strftime("%H%M")
             if current_time_str >= target_time:
                 break
