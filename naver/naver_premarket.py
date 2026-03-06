@@ -29,8 +29,8 @@ def delete_old_premarket_data():
         # 원천 데이터 삭제
         supabase.table("naver_premarket_stk").delete().lt("collected_at", threshold_str).execute()
         
-        # ETF 히스토리 데이터 삭제
-        supabase.table("naver_premarket_etf_history").delete().lt("collected_at", threshold_str).execute()
+        # [추가] 오늘 이전의 ETF 점수 데이터 삭제 (항상 최신 거래일만 유지)
+        supabase.table("naver_premarket_etf").delete().lt("updated_at", threshold_str).execute()
         
         print(f"✅ [프리마켓] 지난 데이터 삭제 프로세스 완료")
     except Exception as e:
@@ -110,8 +110,8 @@ def get_naver_sise(url, market_name, type_name, now_kst):
         return []
 
 def main():
-    # 시작 전 이전 날짜 데이터 삭제 (1회성 실행이므로 즉시 삭제)
-    delete_old_premarket_data()
+    # [수정] 시작 전 삭제 로직 제거 (비교를 위해 기존 데이터를 유지)
+    # delete_old_premarket_data()
 
     now = get_kst_now()
     current_time_str = now.strftime("%H%M")
@@ -151,6 +151,36 @@ def main():
         print(f"✨ 총 {len(all_collected)}개 프리마켓 데이터 수집 완료")
         
         try:
+            # [추가] 기존 데이터와 비교하여 변경사항이 있는지 확인
+            print("🔍 기존 데이터와 비교 중...")
+            existing_response = supabase.table("naver_premarket_stk").select("stk_cd, close_pric, flu_rt, trde_qty").execute()
+            existing_data = {row['stk_cd']: row for row in existing_response.data}
+            
+            is_changed = False
+            if len(all_collected) != len(existing_data):
+                is_changed = True
+            else:
+                for record in all_collected:
+                    cd = record['stk_cd']
+                    if cd not in existing_data:
+                        is_changed = True
+                        break
+                    
+                    ext = existing_data[cd]
+                    # 주요 수치 비교 (현재가, 등락율, 거래량)
+                    if (float(record['close_pric']) != float(ext['close_pric']) or 
+                        float(record['flu_rt']) != float(ext['flu_rt']) or 
+                        int(record['trde_qty']) != int(ext['trde_qty'])):
+                        is_changed = True
+                        break
+            
+            if not is_changed:
+                print("ℹ️ 기존 데이터와 값이 동일합니다. (장이 열리지 않았거나 업데이트가 없는 상태)")
+                print("⏩ 업데이트를 스킵하고 종료합니다.")
+                sys.exit(0)
+
+            print("🔄 데이터 변경이 감지되었습니다. 업데이트를 진행합니다.")
+
             # 기존 데이터 삭제 (최종 스냅샷 유지를 위해)
             supabase.table("naver_premarket_stk").delete().neq("stk_cd", "").execute()
 

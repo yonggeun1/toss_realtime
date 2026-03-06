@@ -41,12 +41,11 @@ def delete_old_naver_data():
         
         # 원천 데이터 삭제 (오늘 이전 것)
         supabase.table("naver_realtime_stk").delete().lt("collected_at", threshold_str).execute()
-        
-        # ETF 히스토리 데이터 삭제 (오늘 이전 것)
-        supabase.table("naver_realtime_etf_history").delete().lt("collected_at", threshold_str).execute()
-        
-        print(f"✅ [네이버] 지난 데이터 삭제 프로세스 완료")
-    except Exception as e:
+
+        # [추가] 오늘 이전의 ETF 점수 데이터 삭제
+        supabase.table("naver_realtime_etf").delete().lt("updated_at", threshold_str).execute()
+
+        print(f"✅ [네이버] 지난 데이터 삭제 프로세스 완료")    except Exception as e:
         print(f"🚨 [네이버] 지난 데이터 삭제 오류: {e}")
 
 def get_naver_sise(url, market_name, type_name, now_kst):
@@ -127,10 +126,9 @@ def main():
     is_morning = "morning" in sys.argv
     is_afternoon = "afternoon" in sys.argv
 
-    # 시작 전 이전 날짜 데이터 삭제
-    # 오전 세션이거나 일반 실행일 때만 삭제 수행
-    if not is_afternoon:
-        delete_old_naver_data()
+    # [수정] 시작 전 무조건 삭제하던 로직 제거 (개장 확인 후 삭제하기 위함)
+    # if not is_afternoon:
+    #     delete_old_naver_data()
 
     # 루프 설정
     start_hour, start_minute = 8, 50
@@ -143,6 +141,8 @@ def main():
     
     print(f"=== 네이버 실시간 시세 수집 루프 시작 (세션: {'오전' if is_morning else '오후' if is_afternoon else '기본'}, 종료 예정: {end_hour:02d}:{end_minute:02d}) ===")
 
+    is_market_open_confirmed = False
+
     while True:
         now = get_kst_now()
         current_time_str = now.strftime("%H%M")
@@ -153,6 +153,35 @@ def main():
             time.sleep(30)
             continue
             
+        # [추가] 시장 개장 여부 확인 (08:58 이후 프리마켓 데이터 기준)
+        if not is_market_open_confirmed:
+            if current_time_str < "0858":
+                print(f"🕒 시장 개장 여부 확인을 위해 08:58까지 대기합니다... (현재: {now.strftime('%H:%M:%S')})", end='\r')
+                time.sleep(10)
+                continue
+            
+            today_str = now.strftime("%Y-%m-%d")
+            print(f"\n🔍 [{today_str}] 시장 개장 여부 확인 중 (프리마켓 데이터 기준)...")
+            try:
+                # 프리마켓 랭킹 테이블에 오늘 데이터가 있는지 확인
+                check_res = supabase.table("naver_premarket_etf_ranking_table").select("updated_at").like("updated_at", f"{today_str}%").limit(1).execute()
+                
+                if not check_res.data:
+                    print(f"ℹ️ [{today_str}] 프리마켓 데이터가 없습니다. 장이 열리지 않은 날로 판단하여 종료합니다. (기존 데이터 보존)")
+                    sys.exit(0)
+                
+                print(f"✅ [{today_str}] 개장일 확인됨. 기존 데이터를 정리하고 수집을 시작합니다.")
+                
+                # 개장일 확인된 직후에만 기존 데이터 삭제 (오후 세션 제외)
+                if not is_afternoon:
+                    delete_old_naver_data()
+                
+                is_market_open_confirmed = True
+            except Exception as e:
+                print(f"⚠️ 개장 확인 중 오류 발생: {e}. 안전을 위해 1분 후 재시도합니다.")
+                time.sleep(60)
+                continue
+
         # 종료 시간 체크
         if current_time_str > f"{end_hour:02d}{end_minute:02d}":
             print(f"\n🕒 현재 시각(KST) {now.strftime('%H:%M:%S')} - 종료 시간({end_hour:02d}:{end_minute:02d})이 되어 종료합니다.")
