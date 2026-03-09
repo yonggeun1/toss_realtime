@@ -214,7 +214,7 @@ def main():
             try:
                 # [수정] 기존 데이터 삭제 (신규 데이터만 유지하기 위함)
                 print("🧹 기존 'naver_realtime_stk' 데이터 삭제 중...")
-                supabase.table("naver_realtime_stk").delete().neq("stk_cd", "").execute()
+                supabase.table("naver_realtime_stk").delete().gte("stk_cd", "0").execute()
 
                 batch_size = 1000
                 for i in range(0, len(all_collected), batch_size):

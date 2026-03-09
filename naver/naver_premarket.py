@@ -182,7 +182,7 @@ def main():
             print("🔄 데이터 변경이 감지되었습니다. 업데이트를 진행합니다.")
 
             # 기존 데이터 삭제 (최종 스냅샷 유지를 위해)
-            supabase.table("naver_premarket_stk").delete().neq("stk_cd", "").execute()
+            supabase.table("naver_premarket_stk").delete().gte("stk_cd", "0").execute()
 
             # 데이터 저장
             batch_size = 1000
