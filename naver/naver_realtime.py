@@ -45,7 +45,8 @@ def delete_old_naver_data():
         # [추가] 오늘 이전의 ETF 점수 데이터 삭제
         supabase.table("naver_realtime_etf").delete().lt("updated_at", threshold_str).execute()
 
-        print(f"✅ [네이버] 지난 데이터 삭제 프로세스 완료")    except Exception as e:
+        print(f"✅ [네이버] 지난 데이터 삭제 프로세스 완료")
+    except Exception as e:
         print(f"🚨 [네이버] 지난 데이터 삭제 오류: {e}")
 
 def get_naver_sise(url, market_name, type_name, now_kst):
