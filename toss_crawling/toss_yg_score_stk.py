@@ -323,11 +323,6 @@ if __name__ == "__main__":
     print("Loading ETF PDF data...")
     cached_pdf_data = load_etf_pdf_from_supabase()
 
-    # 🧹 [변경] 오늘 이전 데이터 삭제는 시작 시 1회만 수행 (오전 세션 또는 단독 실행 시에만)
-    if not is_afternoon:
-        print("🧹 Cleaning up old data (older than today) before starting loop...")
-        delete_old_scores()
-
     # 초기 시간 및 종료 시간 설정
     now = get_kst_now()
     end_hour, end_minute = 15, 20
@@ -345,15 +340,49 @@ if __name__ == "__main__":
         print(f"⚠️ 현재 시간({now.strftime('%H:%M')})이 이미 종료 시간({end_hour:02d}:{end_minute:02d})을 지났습니다. 프로그램을 종료합니다.")
         sys.exit(0)
 
+    is_market_open_confirmed = False
+
     while True:
         # 🕒 서버 시간(UTC)에 9시간을 더해 한국 시간(KST) 구하기
         now = get_kst_now()
+        current_time_str = now.strftime("%H%M")
         
-        # 시작 시간 체크 (09:00 이전이면 대기)
-        if not run_once and now.hour < 9:
-            print(f"🕒 현재 시간(KST) {now.strftime('%H:%M:%S')} - 장 시작 전(09:00)입니다. 대기 중...")
-            time.sleep(60)
+        # 시작 시간 체크 (08:50 이전이면 대기)
+        if not run_once and current_time_str < "0850":
+            print(f"🕒 현재 시간(KST) {now.strftime('%H:%M:%S')} - 시작 전(08:50)입니다. 대기 중...", end='\r')
+            time.sleep(30)
             continue
+
+        # [추가] 시장 개장 여부 확인 (08:58 이후 프리마켓 데이터 기준)
+        if not run_once and not is_market_open_confirmed:
+            if current_time_str < "0858":
+                print(f"🕒 시장 개장 여부 확인을 위해 08:58까지 대기합니다... (현재: {now.strftime('%H:%M:%S')})", end='\r')
+                time.sleep(10)
+                continue
+            
+            today_str = now.strftime("%Y-%m-%d")
+            print(f"\n🔍 [{today_str}] 시장 개장 여부 확인 중 (프리마켓 데이터 기준)...")
+            try:
+                # 프리마켓 랭킹 테이블에 오늘 데이터가 있는지 확인
+                from toss_crawling.supabase_client import supabase as sb
+                check_res = sb.table("naver_premarket_etf_ranking_table").select("updated_at").like("updated_at", f"{today_str}%").limit(1).execute()
+                
+                if not check_res.data:
+                    print(f"ℹ️ [{today_str}] 프리마켓 데이터가 없습니다. 장이 열리지 않은 날로 판단하여 종료합니다. (기존 데이터 보존)")
+                    sys.exit(0)
+                
+                print(f"✅ [{today_str}] 개장일 확인됨. 기존 데이터를 정리하고 수집을 시작합니다.")
+                
+                # 🧹 [변경] 개장일 확인된 직후에만 기존 데이터 삭제 (오후 세션 제외)
+                if not is_afternoon:
+                    print("🧹 Cleaning up old data (older than today) before starting loop...")
+                    delete_old_scores()
+                
+                is_market_open_confirmed = True
+            except Exception as e:
+                print(f"⚠️ 개장 확인 중 오류 발생: {e}. 안전을 위해 1분 후 재시도합니다.")
+                time.sleep(60)
+                continue
 
         start_time = time.time()
         
