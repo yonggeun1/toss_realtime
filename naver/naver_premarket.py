@@ -1,10 +1,6 @@
-import requests
-from bs4 import BeautifulSoup
-import re
 import sys
 import os
 import time
-from datetime import datetime, timedelta
 
 # Supabase 연동
 try:
@@ -15,104 +11,28 @@ except ImportError:
         sys.path.append(project_root)
     from toss_crawling.supabase_client import supabase, get_kst_now
 
+try:
+    from naver.naver_utils import get_naver_sise
+except ImportError:
+    from naver_utils import get_naver_sise
+
+
 def delete_old_premarket_data():
-    """
-    오늘(KST 기준) 이전의 프리마켓 관련 데이터를 모두 삭제합니다.
-    """
+    """오늘(KST 기준) 이전의 프리마켓 관련 데이터를 모두 삭제합니다."""
     try:
         now_kst = get_kst_now()
         today_start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
         threshold_str = today_start_kst.isoformat()
 
         print(f"🧹 [프리마켓] 오늘({today_start_kst.strftime('%Y-%m-%d')}) 이전 데이터 삭제 중...")
-        
-        # 원천 데이터 삭제
         supabase.table("naver_premarket_stk").delete().lt("collected_at", threshold_str).execute()
-        
-        # [추가] 오늘 이전의 ETF 점수 데이터 삭제 (항상 최신 거래일만 유지)
         supabase.table("naver_premarket_etf").delete().lt("updated_at", threshold_str).execute()
-        
-        print(f"✅ [프리마켓] 지난 데이터 삭제 프로세스 완료")
+        print("✅ [프리마켓] 지난 데이터 삭제 프로세스 완료")
     except Exception as e:
         print(f"🚨 [프리마켓] 지난 데이터 삭제 오류: {e}")
 
-def get_naver_sise(url, market_name, type_name, now_kst):
-    """
-    네이버 증권 시세 정보 크롤링 (Nextrade 프리마켓/장후)
-    """
-    print(f"🚀 [{market_name} {type_name}] 크롤링 중: {url}")
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        response.encoding = 'euc-kr'
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.find('table', class_='type_2')
-        if not table:
-            print(f"❌ 테이블을 찾을 수 없습니다: {market_name} {type_name}")
-            return []
-            
-        rows = table.find_all('tr')
-        collected_data = []
-        
-        for row in rows:
-            tds = row.find_all('td')
-            if len(tds) < 10: continue
-            
-            a_tag = tds[1].find('a')
-            if not a_tag: continue
-            
-            stk_nm = a_tag.text.strip()
-            href = a_tag.get('href', '')
-            code_match = re.search(r'code=(\d{6})', href)
-            stk_cd = code_match.group(1) if code_match else ""
-            
-            close_pric_str = tds[2].text.strip().replace(',', '')
-            close_pric = float(close_pric_str) if close_pric_str else 0.0
-            
-            pre_str = tds[3].text.strip().replace(',', '')
-            pre_str = re.sub(r'[^0-9.]', '', pre_str)
-            pre = float(pre_str) if pre_str else 0.0
-            
-            flu_rt_str = tds[4].text.strip().replace('%', '').replace(',', '').replace('+', '')
-            flu_rt = float(flu_rt_str) if flu_rt_str else 0.0
-            
-            trde_qty_str = tds[5].text.strip().replace(',', '')
-            trde_qty = int(trde_qty_str) if trde_qty_str else 0
-            
-            if stk_cd:
-                if "하락" in type_name and flu_rt > 0:
-                    flu_rt = -flu_rt
-                    pre = -pre
-                
-                record = {
-                    "stk_cd": stk_cd,
-                    "stk_nm": stk_nm,
-                    "close_pric": close_pric,
-                    "pre": pre,
-                    "flu_rt": flu_rt,
-                    "trde_qty": trde_qty,
-                    "market": market_name,
-                    "type": type_name,
-                    "collected_at": now_kst
-                }
-                collected_data.append(record)
-                
-        return collected_data
-        
-    except Exception as e:
-        print(f"❌ 오류 발생 ({market_name} {type_name}): {e}")
-        return []
 
 def main():
-    # [수정] 시작 전 삭제 로직 제거 (비교를 위해 기존 데이터를 유지)
-    # delete_old_premarket_data()
-
     now = get_kst_now()
     current_time_str = now.strftime("%H%M")
     target_time = "0851"
@@ -131,16 +51,15 @@ def main():
             time.sleep(30)
         print("\n🚀 지정된 시간이 되어 수집을 시작합니다.")
 
-    # 수집 시점 타임스탬프 고정
     turn_timestamp = now.replace(microsecond=0).isoformat()
-    
+
     urls = [
         ("https://finance.naver.com/sise/nxt_sise_rise.naver?sosok=0", "KOSPI", "상승"),
         ("https://finance.naver.com/sise/nxt_sise_rise.naver?sosok=1", "KOSDAQ", "상승"),
         ("https://finance.naver.com/sise/nxt_sise_fall.naver?sosok=0", "KOSPI", "하락"),
-        ("https://finance.naver.com/sise/nxt_sise_fall.naver?sosok=1", "KOSDAQ", "하락")
+        ("https://finance.naver.com/sise/nxt_sise_fall.naver?sosok=1", "KOSDAQ", "하락"),
     ]
-    
+
     all_collected = []
     for url, market, type_name in urls:
         data = get_naver_sise(url, market, type_name, turn_timestamp)
@@ -149,58 +68,46 @@ def main():
 
     if all_collected:
         print(f"✨ 총 {len(all_collected)}개 프리마켓 데이터 수집 완료")
-        
         try:
-            # [추가] 기존 데이터와 비교하여 변경사항이 있는지 확인
             print("🔍 기존 데이터와 비교 중...")
             existing_response = supabase.table("naver_premarket_stk").select("stk_cd, close_pric, flu_rt, trde_qty").execute()
             existing_data = {row['stk_cd']: row for row in existing_response.data}
-            
-            is_changed = False
-            if len(all_collected) != len(existing_data):
-                is_changed = True
-            else:
+
+            is_changed = len(all_collected) != len(existing_data)
+            if not is_changed:
                 for record in all_collected:
                     cd = record['stk_cd']
-                    if cd not in existing_data:
+                    ext = existing_data.get(cd)
+                    if ext is None or (
+                        float(record['close_pric']) != float(ext['close_pric']) or
+                        float(record['flu_rt']) != float(ext['flu_rt']) or
+                        int(record['trde_qty']) != int(ext['trde_qty'])
+                    ):
                         is_changed = True
                         break
-                    
-                    ext = existing_data[cd]
-                    # 주요 수치 비교 (현재가, 등락율, 거래량)
-                    if (float(record['close_pric']) != float(ext['close_pric']) or 
-                        float(record['flu_rt']) != float(ext['flu_rt']) or 
-                        int(record['trde_qty']) != int(ext['trde_qty'])):
-                        is_changed = True
-                        break
-            
+
             if not is_changed:
                 print("ℹ️ 기존 데이터와 값이 동일합니다. (장이 열리지 않았거나 업데이트가 없는 상태)")
                 print("⏩ 업데이트를 스킵하고 종료합니다.")
                 sys.exit(0)
 
             print("🔄 데이터 변경이 감지되었습니다. 업데이트를 진행합니다.")
-
-            # 기존 데이터 삭제 (최종 스냅샷 유지를 위해)
             supabase.table("naver_premarket_stk").delete().gte("stk_cd", "0").execute()
 
-            # 데이터 저장
             batch_size = 1000
             for i in range(0, len(all_collected), batch_size):
-                batch = all_collected[i:i + batch_size]
-                supabase.table("naver_premarket_stk").upsert(batch).execute()
+                supabase.table("naver_premarket_stk").upsert(all_collected[i:i + batch_size]).execute()
             print(f"🎉 Supabase 저장 완료 ({len(all_collected)}개)")
-            
-            # 프리마켓 점수 산출 RPC 호출
+
             print("📊 [Server-Side] 네이버 프리마켓 점수 계산 요청 중...")
             supabase.rpc('calculate_naver_premarket_score', {}).execute()
             print("✅ [Server-Side] 네이버 프리마켓 점수 업데이트 완료")
-            
         except Exception as e:
             print(f"❌ 저장 및 계산 중 오류: {e}")
 
     print("=== 프리마켓 수집 및 집계 완료. 프로세스를 종료합니다. ===")
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

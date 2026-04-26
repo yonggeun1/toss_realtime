@@ -1,5 +1,7 @@
 import os
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
+import pandas as pd
 from supabase import create_client, Client
 
 # .env 파일 로드 (로컬 개발 환경용)
@@ -21,12 +23,18 @@ except Exception as e:
     raise RuntimeError(f"❌ Supabase 클라이언트 초기화 실패: {e}")
 
 
-import pandas as pd
-from datetime import datetime, timedelta, timezone
-
 def get_kst_now():
     """현재 한국 표준시(KST, UTC+9)를 타임존 정보와 함께 반환합니다."""
     return datetime.now(timezone(timedelta(hours=9)))
+
+def check_market_open(today_str: str) -> bool:
+    """오늘(today_str, YYYY-MM-DD) 프리마켓 ETF 데이터가 있으면 True를 반환합니다."""
+    res = supabase.table("naver_premarket_etf") \
+        .select("etf_code") \
+        .gte("updated_at", today_str) \
+        .limit(1) \
+        .execute()
+    return bool(res.data)
 
 def load_toss_data_from_supabase():
     """
@@ -67,6 +75,7 @@ def load_toss_data_from_supabase():
                 .select("*") \
                 .gte("collected_at", start_date) \
                 .lt("collected_at", end_date) \
+                .order("id") \
                 .range(offset, offset + limit - 1) \
                 .execute()
 
@@ -247,10 +256,10 @@ def delete_old_scores():
 
         # 삭제 쿼리 2: toss_yg_score_stk 테이블
         response_top = supabase.table("toss_yg_score_stk").delete().lt("collected_at", threshold_str).execute()
-        
+
         deleted_count_top = len(response_top.data) if response_top.data else 0
         if deleted_count_top > 0:
-            print(f"🧹 지난 Top100 데이터 삭제 완료: {deleted_count_top}건")
+            print(f"🧹 지난 STK 데이터 삭제 완료: {deleted_count_top}건")
             
     except Exception as e:
         print(f"🚨 지난 데이터 삭제 오류: {e}")
